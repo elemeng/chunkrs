@@ -34,44 +34,21 @@
 chunkrs processes **one logical byte stream at a time** with strictly serial CDC state:
 
 ```text
-┌─────────────────┐     ┌──────────────┐     ┌─────────────────────────┐     ┌─────────────┐
-│ Input Byte      │────▶│ I/O Batching │────▶│ Serial CDC State        │────▶│ Chunk       │
-│ Stream          │     │ (8KB buffers │     │ Machine                 │     │ Stream      │
-│ (any io::Read   │     │  for syscall │     │ (FastCDC rolling hash)  │     │             │
-│  or AsyncRead)  │     │  efficiency) │     │                         │     │             │
-└─────────────────┘     └──────────────┘     └─────────────────────────┘     └─────────────┘
-                                                                                     │
-                                                                                     ▼
-                                                                              ┌─────────────┐
-                                                                              │ Chunk {     │
-                                                                              │   data:     │
-                                                                              │    Bytes,   │
-                                                                              │   offset:   │
-                                                                              │    u64,     │
-                                                                              │   hash:     │
-                                                                              │   ChunkHash │
-                                                                              │ }           │
-                                                                              └─────────────┘
+┌───────────────┐     ┌──────────────┐      ┌──────────────────┐ 
+│ Input Byte    │     │ I/O Batching │      │ Serial CDC State │
+│ Stream        │────▶│ (8KB buffers│────▶ │ Machine          │ 
+│ (any io::Read │     │  for syscall │      │ (FastCDC rolling │ 
+│  or AsyncRead)│     │  efficiency) │      │   hash)          │             
+└───────────────┘     └──────────────┘      └──────────────────┘ 
+
+    ┌─────────────┐       ┌───────────────────┐
+    │             │       │ Chunk {           │
+──▶ │ Chunk      │────▶  │   data: Bytes,    │
+    │ Stream      │       │   offset: u64,    │
+    │             │       │   hash: ChunkHash │
+    └─────────────┘       │ }                 │
+                          └───────────────────┘   
 ```
-
-**What's in the Chunk Stream:**
-
-Each element is a `Chunk` containing:
-- **`data`**: `Bytes` — the actual chunk payload (zero-copy reference when possible)
-- **`offset`**: `Option<u64>` — byte position in the original stream
-- **`hash`**: `Option<ChunkHash>` — BLAKE3 hash for content identity (if enabled)
-
-The stream is **ordered** (chunks appear in original byte order), **deterministic** (same input always produces same chunks), and **lazy** (produced on-demand as bytes are consumed).
-
-**Key architectural decisions:**
-
-1. **Application provides the byte stream**: The library accepts any `std::io::Read` or `futures_io::AsyncRead`. Whether the bytes come from a file, network socket, or in-memory buffer is entirely the application's concern. The library focuses solely on the CDC transformation.
-
-2. **Batching for I/O efficiency**: Internally reads data in ~8KB buffers to balance syscall overhead with cache-friendly processing, while maintaining CDC state across buffer boundaries for deterministic results.
-
-3. **Application-level concurrency**: Parallelize by running multiple `chunkrs` instances on different streams. The library stays out of your thread pool.
-
-4. **Allocation discipline**: No global buffer pools. Thread-local caches prevent allocator lock contention when processing thousands of small streams.
 
 ## Quick Start
 
@@ -97,6 +74,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+**What's in the Chunk Stream:**
+
+Each element is a `Chunk` containing:
+
+- **`data`**: `Bytes` — the actual chunk payload (zero-copy reference when possible) for subsequent use (e.g., writing to disk)
+- **`offset`**: `Option<u64>` — byte position in the original stream
+- **`hash`**: `Option<ChunkHash>` — BLAKE3 hash for content identity (if enabled)
 
 ## API Overview
 
@@ -263,6 +248,16 @@ chunkrs = { version = "0.1", default-features = false }
 [dependencies]
 chunkrs = { version = "0.1", features = ["async-io"] }
 ```
+
+## Key Architectural Decisions
+
+1. **Application provides the byte stream**: The library accepts any `std::io::Read` or `futures_io::AsyncRead`. Whether the bytes come from a file, network socket, or in-memory buffer is entirely the application's concern. The library focuses solely on the CDC transformation.
+
+2. **Batching for I/O efficiency**: Internally reads data in ~8KB buffers to balance syscall overhead with cache-friendly processing, while maintaining CDC state across buffer boundaries for deterministic results.
+
+3. **Application-level concurrency**: Parallelize by running multiple `chunkrs` instances on different streams. The library stays out of your thread pool.
+
+4. **Allocation discipline**: No global buffer pools. Thread-local caches prevent allocator lock contention when processing thousands of small streams.
 
 ## Design Philosophy
 
