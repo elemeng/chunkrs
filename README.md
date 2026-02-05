@@ -34,8 +34,33 @@
 chunkrs processes **one logical byte stream at a time** with strictly serial CDC state:
 
 ```text
-Input Stream → [I/O Batching] → [Serial CDC State Machine] → Chunk Stream
+┌─────────────┐     ┌──────────────┐     ┌─────────────────────────┐     ┌─────────────┐
+│ Input       │────▶│ I/O Batching │────▶│ Serial CDC State        │────▶│ Chunk       │
+│ (File/Net/  │     │ (4-16MB      │     │ Machine                 │     │ Stream      │
+│  Memory)    │     │  chunks)     │     │ (FastCDC rolling hash)  │     │             │
+└─────────────┘     └──────────────┘     └─────────────────────────┘     └─────────────┘
+                                                                               │
+                                                                               ▼
+                                                                        ┌─────────────┐
+                                                                        │ Chunk {     │
+                                                                        │   data:     │
+                                                                        │    Bytes,   │
+                                                                        │   offset:   │
+                                                                        │    u64,     │
+                                                                        │   hash:     │
+                                                                        │   ChunkHash │
+                                                                        │ }           │
+                                                                        └─────────────┘
 ```
+
+**What's in the Chunk Stream:**
+
+Each element is a `Chunk` containing:
+- **`data`**: `Bytes` — the actual chunk payload (zero-copy reference when possible)
+- **`offset`**: `Option<u64>` — byte position in the original stream
+- **`hash`**: `Option<ChunkHash>` — BLAKE3 hash for content identity (if enabled)
+
+The stream is **ordered** (chunks appear in original byte order), **deterministic** (same input always produces same chunks), and **lazy** (produced on-demand as bytes are consumed).
 
 **Key architectural decisions:**
 
