@@ -1,15 +1,18 @@
 [package]
 name = "chunkrs"
 version = "0.1.0"
+authors = ["elemeng <elemeng@foxmail.com>"]
 edition = "2024"
 rust-version = "1.85"
-description = "Streaming Content-Defined Chunking (CDC) for delta sync and deduplication etc. Input stream of bytes, output stream of chunks and chunk's hash"
+description = "Streaming Content-Defined Chunking (CDC) for delta sync and deduplication"
 license = "MIT"
-repository = "https://github.com/yourusername/chunkrs"
-keywords = ["cdc", "deduplication", "chunking", "rolling-hash", "sync"]
-categories = ["data-structures", "encoding", "filesystem"]
+repository = "https://github.com/elemeng/chunkrs"
+documentation = "https://docs.rs/chunkrs"
+homepage = "https://github.com/elemeng/chunkrs"
 readme = "README.md"
-exclude = ["/fuzz", "/target", ".gitignore", "AGENTS.md"]
+keywords = ["cdc", "deduplication", "chunking", "rolling-hash", "fastcdc"]
+categories = ["algorithms", "data-structures", "filesystem"]
+exclude = ["/benches", "/examples", "/fuzz", "/target", ".gitignore", "AGENTS.md", "CHANGELOG.md"]
 
 [dependencies]
 bytes = "1.5"
@@ -36,7 +39,6 @@ tokio-test = "0.4"
 futures-util = "0.3"
 tokio-util = { version = "0.7", features = ["compat"] }
 criterion = { version = "0.5", features = ["html_reports"] }
-libfuzzer-sys = "0.4"
 
 [[bench]]
 name = "chunk_bench"
