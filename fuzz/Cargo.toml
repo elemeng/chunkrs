@@ -1,0 +1,20 @@
+[package]
+name = "chunkrs-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+chunkrs = { path = "..", features = ["hash-blake3"] }
+
+[[bin]]
+name = "chunk_bytes"
+path = "fuzz_targets/chunk_bytes.rs"
+
+[[bin]]
+name = "chunk_reader"
+path = "fuzz_targets/chunk_reader.rs"

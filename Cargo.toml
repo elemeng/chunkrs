@@ -29,6 +29,7 @@ tokio-test = "0.4"
 futures-util = "0.3"
 tokio-util = { version = "0.7", features = ["compat"] }
 criterion = { version = "0.5", features = ["html_reports"] }
+libfuzzer-sys = "0.4"
 
 [[bench]]
 name = "chunk_bench"

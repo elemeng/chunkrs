@@ -1,2 +1,7 @@
 /target
+/fuzz/target
+/fuzz/artifacts
+/fuzz/corpus
+*.rs.bk
+.DS_Store
 /AGENTS.md
