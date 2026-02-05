@@ -1,18 +1,28 @@
 [package]
 name = "chunkrs"
 version = "0.1.0"
-authors = ["elemeng"]
 edition = "2024"
 rust-version = "1.85"
-description = "Streaming Content-Defined Chunking (CDC) for delta sync and deduplication"
+authors = ["elemeng <elemeng@foxmail.com>"]
 license = "MIT"
+description = "Streaming Content-Defined Chunking (CDC) with FastCDC algorithm and BLAKE3 hashing"
+homepage = "https://github.com/elemeng/chunkrs"
 repository = "https://github.com/elemeng/chunkrs"
 documentation = "https://docs.rs/chunkrs"
-homepage = "https://github.com/elemeng/chunkrs"
 readme = "README.md"
-keywords = ["cdc", "deduplication", "chunking", "rolling-hash", "fastcdc"]
+keywords = ["cdc", "deduplication", "chunking", "fastcdc", "blake3"]
 categories = ["algorithms", "data-structures", "filesystem"]
-exclude = ["/benches", "/examples", "/fuzz", "/target", ".gitignore", "AGENTS.md", "CHANGELOG.md"]
+exclude = [
+    "/benches",
+    "/examples",
+    "/fuzz",
+    "/.github",
+    "/target",
+    ".gitignore",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "*.md.orig",
+]
 
 [dependencies]
 bytes = "1.5"

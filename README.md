@@ -1,10 +1,6 @@
 # chunkrs
 
-[![Crates.io](https://img.shields.io/crates/v/chunkrs)](https://crates.io/crates/chunkrs)
-[![Documentation](https://docs.rs/chunkrs/badge.svg)](https://docs.rs/chunkrs)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust Version](https://img.shields.io/badge/rust-1.85+-orange.svg)](https://blog.rust-lang.org/2024/02/28/Rust-1.85.0.html)
-[![Unsafe Forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
+[![Crates.io](https://img.shields.io/crates/v/chunkrs)](https://crates.io/crates/chunkrs) [![Documentation](https://docs.rs/chunkrs/badge.svg)](https://docs.rs/chunkrs) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Rust Version](https://img.shields.io/badge/rust-1.85+-orange.svg)](https://blog.rust-lang.org/2024/02/28/Rust-1.85.0.html) [![Unsafe Forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
 
 > **Deterministic, streaming Content-Defined Chunking (CDC) for Rust**
 
@@ -31,6 +27,7 @@
 | Deduplication (CAS) | ✅ Use with your own index |
 | NVMe Gen4/5 saturation | ✅ 3–5 GB/s per core |
 | Distributed dedup | ✅ Stateless, easy to distribute |
+| Any other CDC use case | ✅ Likely fits |
 
 ## Architecture
 
