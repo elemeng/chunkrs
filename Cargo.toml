@@ -1,0 +1,49 @@
+[package]
+name = "chunkrs"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+
+[dependencies]
+bytes = "1.5"
+blake3 = { version = "1.5", optional = true }
+
+# Async I/O support (runtime-agnostic)
+futures-core = { version = "0.3", optional = true }
+futures-io = { version = "0.3", optional = true }
+pin-project-lite = { version = "0.2", optional = true }
+
+[features]
+default = ["hash-blake3"]
+
+# Hashing support
+hash = []
+hash-blake3 = ["hash", "dep:blake3"]
+
+# Async I/O support (runtime-agnostic, uses futures-io)
+async-io = ["dep:futures-core", "dep:futures-io", "dep:pin-project-lite"]
+
+[dev-dependencies]
+tokio = { version = "1.35", features = ["rt-multi-thread", "macros", "fs", "io-util"] }
+tokio-test = "0.4"
+futures-util = "0.3"
+tokio-util = { version = "0.7", features = ["compat"] }
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "chunk_bench"
+harness = false
+
+[[example]]
+name = "sync_basic"
+
+[[example]]
+name = "sync_file"
+
+[[example]]
+name = "async_tokio"
+required-features = ["async-io"]
+
+[[example]]
+name = "async_stream"
+required-features = ["async-io"]
