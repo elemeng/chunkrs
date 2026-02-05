@@ -3,9 +3,9 @@ name = "chunkrs"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
-authors = ["elemeng <elemeng@foxmail.com>"]
+authors = ["elemeng"]
 license = "MIT"
-description = "Streaming Content-Defined Chunking (CDC) with FastCDC algorithm and BLAKE3 hashing"
+description = "Streaming Content-Defined Chunking (CDC) with FastCDC algorithm with modernized API, support sync and async. Prioritizes correctness, determinism, and composability. Flexible async backend support such as Tokio, async-std, and smol ect. Streaming in --> chunks & hash out."
 homepage = "https://github.com/elemeng/chunkrs"
 repository = "https://github.com/elemeng/chunkrs"
 documentation = "https://docs.rs/chunkrs"
@@ -44,7 +44,12 @@ hash-blake3 = ["hash", "dep:blake3"]
 async-io = ["dep:futures-core", "dep:futures-io", "dep:pin-project-lite"]
 
 [dev-dependencies]
-tokio = { version = "1.35", features = ["rt-multi-thread", "macros", "fs", "io-util"] }
+tokio = { version = "1.35", features = [
+    "rt-multi-thread",
+    "macros",
+    "fs",
+    "io-util",
+] }
 tokio-test = "0.4"
 futures-util = "0.3"
 tokio-util = { version = "0.7", features = ["compat"] }
