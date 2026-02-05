@@ -343,6 +343,21 @@ chunkrs = { version = "0.1", default-features = false, features = ["async-io"] }
 3. **Use `chunk_bytes` for in-memory data**: Avoids iterator overhead
 4. **Use `spawn_blocking` for sync ops in async contexts**: Prevents blocking the runtime
 
+## Acknowledgments
+
+This crate implements the FastCDC algorithm described in:
+
+> Wen Xia, Yukun Zhou, Hong Jiang, Dan Feng, Yu Hua, Yuchong Hu, Yucheng Zhang, Qing Liu,  
+> **"FastCDC: a Fast and Efficient Content-Defined Chunking Approach for Data Deduplication"**,  
+> in Proceedings of USENIX Annual Technical Conference (USENIX ATC'16), Denver, CO, USA, June 22–24, 2016, pages: 101-114.  
+> [Paper Link](https://www.usenix.org/conference/atc16/technical-sessions/presentation/xia)
+
+> Wen Xia, Xiangyu Zou, Yukun Zhou, Hong Jiang, Chuanyi Liu, Dan Feng, Yu Hua, Yuchong Hu, Yucheng Zhang,  
+> **"The Design of Fast Content-Defined Chunking for Data Deduplication based Storage Systems"**,  
+> IEEE Transactions on Parallel and Distributed Systems (TPDS), 2020.
+
+This implementation is inspired by the original [fastcdc](https://crates.io/crates/fastcdc) crate. chunkrs focuses on a modernized API with streaming-first design, runtime-agnostic async support, and allocation-conscious internals.
+
 ## Minimum Supported Rust Version (MSRV)
 
 1.85.0
