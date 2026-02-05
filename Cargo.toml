@@ -3,6 +3,13 @@ name = "chunkrs"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
+description = "Streaming Content-Defined Chunking (CDC) for delta sync and deduplication"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/yourusername/chunkrs"
+keywords = ["cdc", "deduplication", "chunking", "rolling-hash", "sync"]
+categories = ["data-structures", "encoding", "filesystem"]
+readme = "README.md"
+exclude = ["/fuzz", "/target", ".gitignore", "AGENTS.md"]
 
 [dependencies]
 bytes = "1.5"

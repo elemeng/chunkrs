@@ -245,7 +245,7 @@ This boundary is intentional and enforced by design.
 
 ---
 
-## 15. mod structure
+## 15. Module Structure
 
 ```text
 chunkrs/
@@ -253,7 +253,7 @@ chunkrs/
 │
 ├── chunk/
 │   ├── mod.rs
-│   ├── chunk.rs        # Chunk { data: Bytes, offset, hash }
+│   ├── data.rs         # Chunk { data: Bytes, offset, hash }
 │   └── hash.rs         # ChunkHash newtype
 │
 ├── chunker/
@@ -285,6 +285,8 @@ chunkrs/
 └── util/
     └── mod.rs          # small helpers (private)
 ```
+
+**Note:** `fuzz/` contains fuzz testing targets (development only) and is not part of the library structure.
 
 ## 16. Summary
 
