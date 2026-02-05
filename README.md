@@ -1,6 +1,10 @@
 # chunkrs
 
-[![Crates.io](https://img.shields.io/crates/v/chunkrs)](https://crates.io/crates/chunkrs) [![Documentation](https://docs.rs/chunkrs/badge.svg)](https://docs.rs/chunkrs) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Rust Version](https://img.shields.io/badge/rust-1.85+-orange.svg)](https://blog.rust-lang.org/2024/02/28/Rust-1.85.0.html) [![Unsafe Forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
+[![Crates.io](https://img.shields.io/crates/v/chunkrs)](https://crates.io/crates/chunkrs)
+[![Documentation](https://docs.rs/chunkrs/badge.svg)](https://docs.rs/chunkrs)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust Version](https://img.shields.io/badge/rust-1.85+-orange.svg)](https://blog.rust-lang.org/2024/02/28/Rust-1.85.0.html)
+[![Unsafe Forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
 
 > **Deterministic, streaming Content-Defined Chunking (CDC) for Rust**
 
@@ -38,7 +42,7 @@ Input Stream → [I/O Batching] → [Serial CDC State Machine] → Chunk Stream
 
 **Key architectural decisions:**
 
-1. **Batching for I/O efficiency**: Reads data in 4–16MB batches to minimize syscalls, but CDC state persists across batch boundaries for deterministic results.
+1. **Batching for I/O efficiency**: Reads data in batches to minimize syscalls, but CDC state persists across batch boundaries for deterministic results.
 
 2. **Application-level concurrency**: Parallelize by running multiple `chunkrs` instances on different files. The library stays out of your thread pool.
 
@@ -61,7 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for chunk in chunker.chunk(file) {
         let chunk = chunk?;
-        println!("offset: {}, len: {}, hash: {}", 
+        println!("offset: {:?}, len: {}, hash: {:?}", 
             chunk.offset, chunk.len(), chunk.hash);
     }
     
@@ -76,9 +80,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | Type | Description |
 |------|-------------|
 | `Chunker` | Stateful CDC engine (maintains rolling hash across batches) |
-| `Chunk` | Content-addressed block with `Bytes` payload and BLAKE3 hash |
+| `Chunk` | Content-addressed block with `Bytes` payload and optional BLAKE3 hash |
+| `ChunkHash` | 32-byte BLAKE3 hash identifying chunk content |
 | `ChunkConfig` | Min/avg/max chunk sizes and hash configuration |
-| `ChunkStream` | `Iterator` (sync) or `Stream` (async) of chunks |
+| `ChunkIter` | Iterator over chunks (sync) |
+| `ChunkError` | Error type for chunking operations |
 
 ### Synchronous Usage
 
@@ -90,12 +96,14 @@ let file = std::fs::File::open("data.bin")?;
 let chunker = Chunker::new(ChunkConfig::default());
 for chunk in chunker.chunk(file) {
     let chunk = chunk?;
-    // Process chunk.data (Bytes), chunk.hash, chunk.offset
+    // chunk.data: Bytes - the chunk payload
+    // chunk.offset: Option<u64> - position in original stream
+    // chunk.hash: Option<ChunkHash> - BLAKE3 hash (if enabled)
 }
 
-// From memory (zero-copy where possible)
+// From memory
 let data: Vec<u8> = vec![0u8; 1024 * 1024];
-let chunks: Vec<_> = chunker.chunk_bytes(&data).collect();
+let chunks: Vec<_> = chunker.chunk_bytes(data);
 ```
 
 ### Asynchronous Usage
@@ -104,9 +112,9 @@ Runtime-agnostic via `futures-io`:
 
 ```rust
 use futures_util::StreamExt;
-use chunkrs::ChunkConfig;
+use chunkrs::{ChunkConfig, ChunkError};
 
-async fn process<R: futures_io::AsyncRead + Unpin>(reader: R) -> Result<(), chunkrs::Error> {
+async fn process<R: futures_io::AsyncRead + Unpin>(reader: R) -> Result<(), ChunkError> {
     let mut stream = chunkrs::chunk_async(reader, ChunkConfig::default());
     
     while let Some(chunk) = stream.next().await {
@@ -123,8 +131,8 @@ async fn process<R: futures_io::AsyncRead + Unpin>(reader: R) -> Result<(), chun
 use tokio::fs::File;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
-let file = File::open("data.bin").await?.compat();
-let stream = chunkrs::chunk_async(file, ChunkConfig::default());
+let file = File::open("data.bin").await?;
+let stream = chunkrs::chunk_async(file.compat(), ChunkConfig::default());
 ```
 
 ## Configuration
@@ -192,11 +200,10 @@ You can re-chunk a file on Tuesday with different I/O batch sizes and get bit-id
 ## Safety & Correctness
 
 - **No unsafe code**: `#![forbid(unsafe_code)]`
-- **Fuzz tested**: Continuous fuzzing with `proptest` and `libfuzzer` ensures:
+- **Comprehensive testing**: Unit tests, doc tests, and property-based tests ensure:
   - Determinism invariants
   - Batch equivalence (chunking whole vs chunked yields same results)
   - No panics on edge cases (empty files, single byte, max-size boundaries)
-  - Memory safety (Miri tested)
 
 ## Algorithm
 
@@ -216,17 +223,20 @@ You can re-chunk a file on Tuesday with different I/O batch sizes and get bit-id
 | Feature | Description | Default |
 |---------|-------------|---------|
 | `hash-blake3` | BLAKE3 chunk hashing | ✅ |
-| `async` | Async `Stream` support via `futures-io` | ✅ |
-| `rayon` | Thread-local pool optimizations | ✅ |
+| `async-io` | Async `Stream` support via `futures-io` | ❌ |
 
 ```toml
-# Minimal: sync only, no hashing, no async
+# Default: sync + hashing
+[dependencies]
+chunkrs = "0.1"
+
+# Minimal: sync only, no hashing
 [dependencies]
 chunkrs = { version = "0.1", default-features = false }
 
-# Async + hashing (full featured)
+# Full featured: sync + async + hashing
 [dependencies]
-chunkrs = { version = "0.1", features = ["async", "hash-blake3"] }
+chunkrs = { version = "0.1", features = ["async-io"] }
 ```
 
 ## Design Philosophy
@@ -241,18 +251,18 @@ Some implementations split large files into "superblocks" and process them in pa
 
 **Allocation discipline:**
 
-Global buffer pools ( `lazy_static!` pools) cause cache line bouncing and atomic contention under high concurrency. chunkrs uses **thread-local caches**—zero synchronization, maximum locality.
+Global buffer pools (`lazy_static!` pools) cause cache line bouncing and atomic contention under high concurrency. chunkrs uses **thread-local caches**—zero synchronization, maximum locality.
 
 ## Acknowledgments
 
 This crate implements the FastCDC algorithm described in:
 
-> Wen Xia, Yukun Zhou, Hong Jiang, Dan Feng, Yu Hua, Yuchong Hu, Yucheng Zhang, Qing Liu,  
+> Wen Xia, Yukun Zhou, Hong Jiang, Dan Feng, Yu Hua, Yuchong Hu, Yuchong Zhang, Qing Liu,  
 > **"FastCDC: a Fast and Efficient Content-Defined Chunking Approach for Data Deduplication"**,  
 > in Proceedings of USENIX Annual Technical Conference (USENIX ATC'16), Denver, CO, USA, June 22–24, 2016, pages: 101-114.  
-> [Paper Link](https://www.usenix.org/conference/atc16/technical-sessions/presentation/xia )
+> [Paper Link](https://www.usenix.org/conference/atc16/technical-sessions/presentation/xia)
 
-> Wen Xia, Xiangyu Zou, Yukun Zhou, Hong Jiang, Chuanyi Liu, Dan Feng, Yu Hua, Yuchong Hu, Yucheng Zhang,  
+> Wen Xia, Xiangyu Zou, Yukun Zhou, Hong Jiang, Chuanyi Liu, Dan Feng, Yu Hua, Yuchong Hu, Yuchong Zhang,  
 > **"The Design of Fast Content-Defined Chunking for Data Deduplication based Storage Systems"**,  
 > IEEE Transactions on Parallel and Distributed Systems (TPDS), 2020.
 
