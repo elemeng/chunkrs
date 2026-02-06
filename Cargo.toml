@@ -1,11 +1,11 @@
 [package]
 name = "chunkrs"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2024"
 rust-version = "1.85"
 authors = ["elemeng"]
 license = "MIT"
-description = "Streaming Content-Defined Chunking (CDC) using FastCDC algorithm with modernized API, support sync and async I/O. Prioritizes correctness, determinism, and composability. Flexible async backend support such as Tokio, async-std, and smol ect. Streaming in --> chunks & hash out."
+description = "A high-performance, deterministic, flexible and portable streaming Content-Defined Chunking (CDC) and hashing infrastructure library. Streaming (input) --> chunks & hash (output)."
 homepage = "https://github.com/elemeng/chunkrs"
 repository = "https://github.com/elemeng/chunkrs"
 documentation = "https://docs.rs/chunkrs"
