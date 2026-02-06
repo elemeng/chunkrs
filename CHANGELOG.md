@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.8.2] - 2026-02-06
+
+### Changed
+
+- Updated package description for clarity and conciseness
+- Simplified README introduction with new tagline
+- Reorganized README section order for better flow
+
+### Improved
+
+- More concise and impactful README messaging
+- Better alignment of "When to Use" section placement
+
+## [0.8.1] - 2026-02-06
+
+### Changed
+
+- Refined package description to emphasize high-performance, portable infrastructure
+- Clarified streaming model: "Bytes in → Chunks & hashes out"
+
 ## [0.8.0] - 2026-02-06
 
 ### Added

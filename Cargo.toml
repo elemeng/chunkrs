@@ -5,12 +5,12 @@ edition = "2024"
 rust-version = "1.85"
 authors = ["elemeng"]
 license = "MIT"
-description = "A high-performance, deterministic, flexible and portable streaming Content-Defined Chunking (CDC) and hashing infrastructure library. Streaming (input) --> chunks & hash (output)."
+description = "A high-performance, deterministic, flexible and portable zero-copy streaming Content-Defined Chunking (CDC) and hashing infrastructure library. Bytes in → Chunks & hashes out"
 homepage = "https://github.com/elemeng/chunkrs"
 repository = "https://github.com/elemeng/chunkrs"
 documentation = "https://docs.rs/chunkrs"
 readme = "README.md"
-keywords = ["cdc", "deduplication", "chunking", "fastcdc", "blake3"]
+keywords = ["cdc", "deduplication", "chunking", "fastcdc", "hash"]
 categories = ["algorithms", "data-structures", "filesystem"]
 exclude = [
     "/benches",
