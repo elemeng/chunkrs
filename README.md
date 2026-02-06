@@ -31,6 +31,46 @@
 
 ## Architecture
 
+## Development Status
+
+**Version 0.8.0 — Cautious Development Phase**
+
+The chunkrs crate has reached a significant milestone: the core design and public APIs are considered **almost matured**. This means:
+
+- ✅ **Stable public API surface**: The main types and methods are well-designed and tested
+- ✅ **Comprehensive documentation**: All public APIs have detailed documentation with examples
+- ✅ **Full feature set**: Both synchronous and asynchronous streaming support is complete
+- ✅ **Well-tested**: 45 unit tests + 40 doctests covering core functionality
+- ✅ **Production-ready quality**: No unsafe code, no clippy warnings, follows Rust 2024 best practices
+
+### What This Means for Users
+
+You can use chunkrs with confidence that:
+- The API is unlikely to undergo breaking changes without careful consideration
+- The implementation is solid and well-tested
+- Documentation is comprehensive and accurate
+- Performance is optimized for real-world use cases
+
+### What This Means for Contributors
+
+We are now in a **cautious development phase**. Future changes will be made with careful consideration for:
+- API stability and backward compatibility
+- Performance impact
+- Documentation completeness
+- Test coverage
+
+Breaking changes will only be made if absolutely necessary and will be clearly communicated in changelogs.
+
+### Remaining Work
+
+While the core is mature, there are still areas for enhancement:
+- Additional hashing algorithms (beyond BLAKE3)
+- Performance optimizations for specific use cases
+- Enhanced error reporting
+- More integration examples
+- Benchmarks for a wider range of scenarios
+
+
 chunkrs processes **one logical byte stream at a time** with strictly serial CDC state:
 
 ```text
@@ -54,7 +94,7 @@ chunkrs processes **one logical byte stream at a time** with strictly serial CDC
 
 ```toml
 [dependencies]
-chunkrs = "0.1"
+chunkrs = "0.8"
 ```
 
 ```rust
@@ -238,7 +278,7 @@ You can re-chunk a file on Tuesday with different I/O batch sizes and get bit-id
 ```toml
 # Default: sync + hashing
 [dependencies]
-chunkrs = "0.1"
+chunkrs = "0.8"
 
 # Minimal: sync only, no hashing
 [dependencies]
