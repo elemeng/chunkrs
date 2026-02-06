@@ -251,27 +251,85 @@ chunkrs = { version = "0.1", features = ["async-io"] }
 
 ## Roadmap
 
-**Current:** 0.8.0 — Core API stable, seeking production feedback.
+**Current:** 0.8.0 — Core API stable, comprehensive feature set, seeking production feedback.
 
-| Version | Focus | Guarantees |
-|---------|-------|------------|
-| **0.1** | Hardening | Fuzzing, Miri, cross-platform validation |
-| **0.8–0.9** | API Freeze | No breaking changes; docs & examples only |
-| **1.0.0** | Stable Release | SemVer commitment; MSRV 2-year support |
+### Implemented ✅
 
-**Post-1.0 (Additive only):**
+**Core Functionality:**
+- FastCDC rolling hash algorithm with configurable min/avg/max chunk sizes
+- Synchronous streaming via `std::io::Read`
+- Asynchronous streaming via `futures-io::AsyncRead` (runtime-agnostic: Tokio, async-std, smol)
+- BLAKE3 cryptographic hashing for chunk identity
+- Thread-local buffer pools for zero-allocation hot path
+- Deterministic chunking across batch sizes and execution timings
 
-- SIMD optimizations (AVX2/AVX-512)
-- Alternative hashes (xxHash)
-- `no_std` support
+**Quality & Safety:**
+- 45 unit tests + 40 doctests
+- Fuzzing harness for property-based testing
+- `#![forbid(unsafe_code)]` — strictly safe Rust
+- No clippy warnings with `-D warnings`
+- Rust 2024 edition best practices
 
-**Non-Goals:** Networking, encryption, compression — handle these in your application layer or companion crates.
+**Documentation:**
+- Comprehensive module, struct, and method documentation
+- 4 working examples (sync_basic, sync_file, async_tokio, async_stream)
+- Detailed algorithm explanations and design rationale
 
-**Version Policy:** Pre-1.0 allows API refinement based on usage. 1.0+ maintains backward compatibility; deprecations undergo 12-month notice period.
+### Planned Enhancements
 
-Feedback welcome at [GitHub Issues](https://github.com/elemeng/chunkrs/issues).
+**0.9.x — Production Hardening:**
+- Extended cross-platform testing (Windows, macOS, Linux variants)
+- Additional fuzzing targets for edge cases
+- Miri validation for memory safety
+- Performance profiling and optimization for specific workloads
+- Enhanced error messages with context
 
-## Key Architectural Decisions
+**1.0.0 — Stable Release:**
+- Alternative hash algorithms (xxHash for speed, SHA-256 for compatibility)
+- Configurable buffer pool sizes for memory-constrained environments
+- Custom allocator support for specialized use cases
+- Formal SemVer commitment with MSRV policy
+- Comprehensive integration guide and production deployment patterns
+
+**Post-1.0 — Additive Features Only:**
+- SIMD optimizations (AVX2/AVX-512) for rolling hash
+- Hardware-accelerated hashing (BLAKE3 SIMD, SHA-NI)
+- Advanced CDC algorithm variants (e.g., pattern-aware chunking)
+- `no_std` support for embedded environments
+
+### Non-Goals
+
+These features are intentionally out of scope:
+
+- **Networking**: Handle in application layer
+- **Encryption**: Pre-encrypt or post-encrypt at application layer
+- **Compression**: Apply compression before or after chunking
+- **Deduplication indexing**: Use companion crates (CAS index implementations)
+- **Distributed coordination**: Manage at application level
+
+### Version Policy
+
+**Pre-1.0 (0.8.x – 0.9.x):**
+- API refinement based on real-world usage feedback
+- Breaking changes communicated clearly in changelogs
+- Focus on stability and production readiness
+
+**1.0.0+:**
+- Strict SemVer compliance
+- Breaking changes only for security issues
+- Deprecation cycle: 12-month notice before removal
+- Minimum Rust Version (MSRV) supported for 2 years
+
+### Feedback & Contributions
+
+We're actively seeking feedback on:
+- Real-world deployment patterns and performance characteristics
+- Edge cases and failure modes in production
+- Integration patterns with storage systems and databases
+- Feature requests that align with CDC use cases
+
+Open issues or discussions at [GitHub Issues](https://github.com/elemeng/chunkrs/issues).
+
 
 1. **Application provides the byte stream**: The library accepts any `std::io::Read` or `futures_io::AsyncRead`. Whether the bytes come from a file, network socket, or in-memory buffer is entirely the application's concern. The library focuses solely on the CDC transformation.
 
