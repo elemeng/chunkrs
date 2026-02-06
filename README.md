@@ -242,11 +242,11 @@ chunkrs = "0.8"
 
 # Minimal: sync only, no hashing
 [dependencies]
-chunkrs = { version = "0.1", default-features = false }
+chunkrs = { version = "0.8", default-features = false }
 
 # Full featured: sync + async + hashing
 [dependencies]
-chunkrs = { version = "0.1", features = ["async-io"] }
+chunkrs = { version = "0.8", features = ["async-io"] }
 ```
 
 ## Roadmap
