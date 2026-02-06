@@ -8,14 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- Updated package description for clarity and conciseness
-- Simplified README introduction with new tagline
-- Reorganized README section order for better flow
-
-### Improved
-
-- More concise and impactful README messaging
-- Better alignment of "When to Use" section placement
+- Added "zero-copy" to package description to highlight key feature
+- Updated package description arrow style from "-->" to "→" for consistency
+- Updated keywords from "blake3" to "hash" for broader applicability
 
 ## [0.8.1] - 2026-02-06
 
