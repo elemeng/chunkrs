@@ -31,46 +31,6 @@
 
 ## Architecture
 
-## Development Status
-
-**Version 0.8.0 — Cautious Development Phase**
-
-The chunkrs crate has reached a significant milestone: the core design and public APIs are considered **almost matured**. This means:
-
-- ✅ **Stable public API surface**: The main types and methods are well-designed and tested
-- ✅ **Comprehensive documentation**: All public APIs have detailed documentation with examples
-- ✅ **Full feature set**: Both synchronous and asynchronous streaming support is complete
-- ✅ **Well-tested**: 45 unit tests + 40 doctests covering core functionality
-- ✅ **Production-ready quality**: No unsafe code, no clippy warnings, follows Rust 2024 best practices
-
-### What This Means for Users
-
-You can use chunkrs with confidence that:
-- The API is unlikely to undergo breaking changes without careful consideration
-- The implementation is solid and well-tested
-- Documentation is comprehensive and accurate
-- Performance is optimized for real-world use cases
-
-### What This Means for Contributors
-
-We are now in a **cautious development phase**. Future changes will be made with careful consideration for:
-- API stability and backward compatibility
-- Performance impact
-- Documentation completeness
-- Test coverage
-
-Breaking changes will only be made if absolutely necessary and will be clearly communicated in changelogs.
-
-### Remaining Work
-
-While the core is mature, there are still areas for enhancement:
-- Additional hashing algorithms (beyond BLAKE3)
-- Performance optimizations for specific use cases
-- Enhanced error reporting
-- More integration examples
-- Benchmarks for a wider range of scenarios
-
-
 chunkrs processes **one logical byte stream at a time** with strictly serial CDC state:
 
 ```text
@@ -289,7 +249,69 @@ chunkrs = { version = "0.1", default-features = false }
 chunkrs = { version = "0.1", features = ["async-io"] }
 ```
 
-## Key Architectural Decisions
+## Roadmap
+
+### Current Status: Version 0.8.0 — Cautious Development Phase
+
+The chunkrs crate has reached a significant milestone: the core design and public APIs are considered **almost matured**. 
+
+**Completed Milestones:**
+- ✅ Stable public API surface with comprehensive documentation
+- ✅ Full feature set: synchronous and asynchronous streaming support
+- ✅ Well-tested: 45 unit tests + 40 doctests
+- ✅ Production-ready quality: no unsafe code, no clippy warnings
+- ✅ Rust 2024 edition best practices
+
+### Stability Commitments
+
+**For Users:**
+- API breaking changes will be rare and clearly communicated in changelogs
+- Backward compatibility is a priority for all changes
+- Documentation is kept up-to-date with releases
+
+**For Contributors:**
+- All changes undergo careful review for API stability
+- Performance optimizations must not degrade existing use cases
+- Test coverage must be maintained or improved
+
+### Future Enhancements
+
+While the core is mature, we're exploring these areas for future versions:
+
+**Short-term (0.9.x):**
+- Enhanced error reporting with more context
+- Additional integration examples and tutorials
+- Expanded benchmark suite covering more scenarios
+- Improved documentation for edge cases
+
+**Medium-term (1.0.0):**
+- Additional hashing algorithm options (xxHash, SHA-256)
+- Performance optimizations for specific workload patterns
+- Configurable buffer pool sizes for memory-constrained environments
+- Streaming APIs with custom allocators
+
+**Long-term Explorations:**
+- SIMD-optimized rolling hash implementations
+- Hardware-accelerated hashing support
+- Advanced CDC algorithm variants (e.g., for specific data patterns)
+
+### Contributing to the Roadmap
+
+We welcome community input on the roadmap. If you have:
+- Use cases not well-served by the current API
+- Performance bottlenecks in specific scenarios
+- Ideas for new features or algorithms
+
+Please open a GitHub issue or discussion. We're especially interested in real-world usage patterns that can guide development priorities.
+
+### Version Policy
+
+- **0.8.x**: Cautious development, API stability focus
+- **0.9.x**: Feature stabilization, breaking changes only if necessary
+- **1.0.0**: Stable release, semantic versioning applies strictly
+
+All releases will include detailed changelogs documenting any breaking changes.
+
 
 1. **Application provides the byte stream**: The library accepts any `std::io::Read` or `futures_io::AsyncRead`. Whether the bytes come from a file, network socket, or in-memory buffer is entirely the application's concern. The library focuses solely on the CDC transformation.
 
