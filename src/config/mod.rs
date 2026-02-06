@@ -1,4 +1,24 @@
 //! Configuration for chunking behavior.
+//!
+//! This module provides types to configure how chunking is performed:
+//!
+//! - [`ChunkConfig`] - Controls chunk size boundaries and hashing behavior
+//! - [`HashConfig`] - Specifies whether to compute cryptographic hashes
+//!
+//! # Example
+//!
+//! ```
+//! use chunkrs::{ChunkConfig, HashConfig};
+//!
+//! // Custom chunk sizes
+//! let config = ChunkConfig::new(4096, 16384, 65536)?;
+//!
+//! // Enable hashing
+//! let config = ChunkConfig::default()
+//!     .with_hash_config(HashConfig::enabled());
+//!
+//! # Ok::<(), chunkrs::ChunkError>(())
+//! ```
 
 use crate::error::ChunkError;
 
@@ -13,15 +33,37 @@ pub const DEFAULT_MAX_CHUNK_SIZE: usize = 64 * 1024;
 
 /// Configuration for content-defined chunking behavior.
 ///
+/// `ChunkConfig` controls the size constraints and hashing behavior for the
+/// chunking process. It uses the FastCDC algorithm which requires:
+///
+/// - Minimum chunk size (`min_size`) - No chunk will be smaller than this
+/// - Average chunk size (`avg_size`) - Target size for most chunks
+/// - Maximum chunk size (`max_size`) - No chunk will exceed this
+///
+/// # Size Constraints
+///
+/// All sizes must be:
+/// - Non-zero
+/// - Powers of 2 (for optimal performance)
+/// - Ordered: `min_size <= avg_size <= max_size`
+///
 /// # Example
 ///
 /// ```
 /// use chunkrs::ChunkConfig;
 ///
+/// // Use default configuration
+/// let config = ChunkConfig::default();
+///
+/// // Custom configuration
+/// let config = ChunkConfig::new(4096, 16384, 65536)?;
+///
+/// // Builder pattern
 /// let config = ChunkConfig::default()
-///     .with_min_size(4096)
-///     .with_avg_size(16384)
-///     .with_max_size(65536);
+///     .with_min_size(8192)
+///     .with_avg_size(32768)
+///     .with_max_size(131072);
+/// # Ok::<(), chunkrs::ChunkError>(())
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkConfig {
@@ -41,10 +83,28 @@ pub struct ChunkConfig {
 impl ChunkConfig {
     /// Creates a new configuration with the specified size bounds.
     ///
+    /// # Arguments
+    ///
+    /// * `min_size` - Minimum chunk size in bytes (must be power of 2)
+    /// * `avg_size` - Average/target chunk size in bytes (must be power of 2)
+    /// * `max_size` - Maximum chunk size in bytes (must be power of 2)
+    ///
     /// # Errors
     ///
-    /// Returns an error if the size constraints are invalid (min > avg or avg > max,
-    /// or if sizes are not powers of 2).
+    /// Returns [`ChunkError::InvalidConfig`] if:
+    /// - Any size is zero
+    /// - `min_size > avg_size` or `avg_size > max_size`
+    /// - Sizes are not powers of 2
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chunkrs::ChunkConfig;
+    ///
+    /// let config = ChunkConfig::new(4096, 16384, 65536)?;
+    /// assert_eq!(config.min_size(), 4096);
+    /// # Ok::<(), chunkrs::ChunkError>(())
+    /// ```
     pub fn new(min_size: usize, avg_size: usize, max_size: usize) -> Result<Self, ChunkError> {
         if min_size == 0 || avg_size == 0 || max_size == 0 {
             return Err(ChunkError::InvalidConfig {
@@ -81,24 +141,69 @@ impl ChunkConfig {
     }
 
     /// Sets the minimum chunk size.
+    ///
+    /// Note: This does not validate the configuration. Use [`ChunkConfig::validate`]
+    /// to check if the configuration is valid.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chunkrs::ChunkConfig;
+    ///
+    /// let config = ChunkConfig::default().with_min_size(8192);
+    /// assert_eq!(config.min_size(), 8192);
+    /// ```
     pub fn with_min_size(mut self, size: usize) -> Self {
         self.min_size = size;
         self
     }
 
     /// Sets the average/target chunk size.
+    ///
+    /// Note: This does not validate the configuration. Use [`ChunkConfig::validate`]
+    /// to check if the configuration is valid.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chunkrs::ChunkConfig;
+    ///
+    /// let config = ChunkConfig::default().with_avg_size(32768);
+    /// assert_eq!(config.avg_size(), 32768);
+    /// ```
     pub fn with_avg_size(mut self, size: usize) -> Self {
         self.avg_size = size;
         self
     }
 
     /// Sets the maximum chunk size.
+    ///
+    /// Note: This does not validate the configuration. Use [`ChunkConfig::validate`]
+    /// to check if the configuration is valid.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chunkrs::ChunkConfig;
+    ///
+    /// let config = ChunkConfig::default().with_max_size(131072);
+    /// assert_eq!(config.max_size(), 131072);
+    /// ```
     pub fn with_max_size(mut self, size: usize) -> Self {
         self.max_size = size;
         self
     }
 
     /// Sets the hash configuration.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chunkrs::{ChunkConfig, HashConfig};
+    ///
+    /// let config = ChunkConfig::default()
+    ///     .with_hash_config(HashConfig::enabled());
+    /// ```
     pub fn with_hash_config(mut self, config: HashConfig) -> Self {
         self.hash_config = config;
         self
@@ -125,6 +230,17 @@ impl ChunkConfig {
     }
 
     /// Validates the current configuration.
+    ///
+    /// Returns an error if the configuration is invalid.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chunkrs::ChunkConfig;
+    ///
+    /// let config = ChunkConfig::default().with_min_size(0);
+    /// assert!(config.validate().is_err());
+    /// ```
     pub fn validate(&self) -> Result<(), ChunkError> {
         Self::new(self.min_size, self.avg_size, self.max_size).map(|_| ())
     }
@@ -142,6 +258,21 @@ impl Default for ChunkConfig {
 }
 
 /// Configuration for chunk hashing behavior.
+///
+/// `HashConfig` controls whether BLAKE3 cryptographic hashes are computed
+/// for each chunk. Hashing is enabled by default.
+///
+/// # Example
+///
+/// ```
+/// use chunkrs::HashConfig;
+///
+/// // Enable hashing
+/// let config = HashConfig::enabled();
+///
+/// // Disable hashing
+/// let config = HashConfig::disabled();
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct HashConfig {
     /// Whether to compute BLAKE3 hashes for chunks.
@@ -150,16 +281,38 @@ pub struct HashConfig {
 
 impl HashConfig {
     /// Creates a new hash configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `enabled` - Whether to enable hashing
     pub const fn new(enabled: bool) -> Self {
         Self { enabled }
     }
 
     /// Enables hashing.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chunkrs::HashConfig;
+    ///
+    /// let config = HashConfig::enabled();
+    /// assert!(config.enabled);
+    /// ```
     pub const fn enabled() -> Self {
         Self { enabled: true }
     }
 
     /// Disables hashing.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chunkrs::HashConfig;
+    ///
+    /// let config = HashConfig::disabled();
+    /// assert!(!config.enabled);
+    /// ```
     pub const fn disabled() -> Self {
         Self { enabled: false }
     }

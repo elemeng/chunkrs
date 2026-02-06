@@ -1,4 +1,26 @@
 //! Core chunking engine - Chunker and ChunkIter.
+//!
+//! This module implements the synchronous chunking API using the FastCDC
+//! algorithm. It provides two main types:
+//!
+//! - [`Chunker`] - Configures and initiates chunking operations
+//! - [`ChunkIter`] - Iterator that yields chunks from a [`std::io::Read`] source
+//!
+//! # Example
+//!
+//! ```ignore
+//! use chunkrs::{Chunker, ChunkConfig};
+//! use std::fs::File;
+//!
+//! let file = File::open("data.bin")?;
+//! let chunker = Chunker::new(ChunkConfig::default());
+//!
+//! for chunk in chunker.chunk(file) {
+//!     let chunk = chunk?;
+//!     println!("Chunk: {} bytes", chunk.len());
+//! }
+//! # Ok::<(), chunkrs::ChunkError>(())
+//! ```
 
 use std::io::Read;
 
@@ -15,6 +37,9 @@ use crate::hash::Blake3Hasher;
 
 /// A chunker that processes byte streams into content-defined chunks.
 ///
+/// `Chunker` is the high-level API for synchronous chunking. It holds a
+/// configuration and provides methods to chunk data from various sources.
+///
 /// # Example
 ///
 /// ```
@@ -23,7 +48,9 @@ use crate::hash::Blake3Hasher;
 ///
 /// let data = b"some data to chunk";
 /// let chunker = Chunker::new(ChunkConfig::default());
-/// let chunks: Vec<_> = chunker.chunk(Cursor::new(&data[..])).collect();
+/// let chunks: Vec<_> = chunker.chunk(Cursor::new(&data[..])).collect::<Result<_, _>>()?;
+/// assert!(!chunks.is_empty());
+/// # Ok::<(), chunkrs::ChunkError>(())
 /// ```
 #[derive(Debug, Clone)]
 pub struct Chunker {
@@ -32,16 +59,79 @@ pub struct Chunker {
 
 impl Chunker {
     /// Creates a new chunker with the given configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The chunking configuration specifying min/avg/max chunk sizes
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chunkrs::{Chunker, ChunkConfig};
+    ///
+    /// let config = ChunkConfig::default();
+    /// let chunker = Chunker::new(config);
+    /// ```
     pub fn new(config: ChunkConfig) -> Self {
         Self { config }
     }
 
     /// Creates a chunking iterator from a reader.
+    ///
+    /// This method returns an iterator that lazily reads from the reader and
+    /// yields chunks as boundaries are found.
+    ///
+    /// # Arguments
+    ///
+    /// * `reader` - Any type implementing [`std::io::Read`]
+    ///
+    /// # Returns
+    ///
+    /// A [`ChunkIter`] that yields [`Result<Chunk, ChunkError>`]
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use chunkrs::{Chunker, ChunkConfig};
+    /// use std::io::File;
+    ///
+    /// let file = File::open("data.bin")?;
+    /// let chunker = Chunker::new(ChunkConfig::default());
+    ///
+    /// for chunk in chunker.chunk(file) {
+    ///     let chunk = chunk?;
+    ///     println!("Chunk: {} bytes", chunk.len());
+    /// }
+    /// # Ok::<(), chunkrs::ChunkError>(())
+    /// ```
     pub fn chunk<R: Read>(self, reader: R) -> ChunkIter<R> {
         ChunkIter::new(reader, self.config)
     }
 
     /// Chunks an in-memory buffer.
+    ///
+    /// This is a convenience method for chunking data that is already in memory.
+    /// It's more efficient than creating a [`std::io::Cursor`] and using
+    /// [`Chunker::chunk`] for small to medium-sized data.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - Any type that can be converted to [`Bytes`]
+    ///
+    /// # Returns
+    ///
+    /// A vector of [`Chunk`] objects
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chunkrs::{Chunker, ChunkConfig};
+    ///
+    /// let chunker = Chunker::new(ChunkConfig::default());
+    /// let chunks = chunker.chunk_bytes(&b"hello world"[..]);
+    ///
+    /// assert!(!chunks.is_empty());
+    /// ```
     pub fn chunk_bytes(&self, data: impl Into<Bytes>) -> Vec<Chunk> {
         let data = data.into();
         let mut chunks = Vec::new();
@@ -115,6 +205,29 @@ impl Default for Chunker {
 }
 
 /// An iterator that yields chunks from a reader.
+///
+/// `ChunkIter` reads data from a [`std::io::Read`] source incrementally and
+/// yields chunks as the FastCDC algorithm identifies boundaries.
+///
+/// The iterator is lazy and reads in chunks of up to 8KB at a time, making it
+/// efficient for streaming large data sources.
+///
+/// # Example
+///
+/// ```ignore
+/// use chunkrs::{Chunker, ChunkConfig};
+/// use std::io::File;
+///
+/// let file = File::open("data.bin")?;
+/// let chunker = Chunker::new(ChunkConfig::default());
+/// let mut iter = chunker.chunk(file);
+///
+/// while let Some(result) = iter.next() {
+///     let chunk = result?;
+///     println!("Chunk: {} bytes", chunk.len());
+/// }
+/// # Ok::<(), chunkrs::ChunkError>(())
+/// ```
 pub struct ChunkIter<R> {
     reader: R,
     config: ChunkConfig,
@@ -129,7 +242,12 @@ pub struct ChunkIter<R> {
 
 impl<R: Read> ChunkIter<R> {
     /// Creates a new chunk iterator.
-    pub fn new(reader: R, config: ChunkConfig) -> Self {
+    ///
+    /// # Arguments
+    ///
+    /// * `reader` - The source of data to chunk
+    /// * `config` - The chunking configuration
+    fn new(reader: R, config: ChunkConfig) -> Self {
         let cdc = FastCdc::new(config.min_size(), config.avg_size(), config.max_size());
 
         #[cfg(feature = "hash-blake3")]
@@ -153,6 +271,9 @@ impl<R: Read> ChunkIter<R> {
     }
 
     /// Processes the chunk buffer and returns a chunk.
+    ///
+    /// This internal method extracts a chunk of the specified length from
+    /// the buffer, computes its hash if enabled, and updates the offset.
     fn emit_chunk(&mut self, len: usize) -> Chunk {
         let data = Bytes::copy_from_slice(&self.chunk_buffer[..len]);
         let chunk_offset = self.offset;

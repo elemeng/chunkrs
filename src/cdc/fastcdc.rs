@@ -1,10 +1,22 @@
 //! FastCDC rolling hash implementation.
 //!
+//! This module implements the FastCDC (Fast Content-Defined Chunking) algorithm
+//! for efficient content-defined chunking.
+//!
+//! # Algorithm Overview
+//!
+//! FastCDC uses a rolling hash to identify chunk boundaries based on content
+//! patterns rather than fixed sizes. Key features:
+//!
+//! - **Zero-padded masks**: Uses distributed bit masks for better deduplication ratio
+//! - **Dual gear tables**: Pre-computed tables for faster hashing
+//! - **Normalized chunking**: Two-stage masks to control chunk size distribution
+//! - **Deterministic**: Same input always produces same chunk boundaries
+//!
+//! # References
+//!
 //! Based on "FastCDC: A Fast and Efficient Content-Defined Chunking Approach for Data Deduplication"
 //! by Wen Xia et al., USENIX ATC 2016.
-//!
-//! This implementation uses optimized zero-padded masks from the paper for better deduplication
-//! ratios, dual gear tables for faster hashing, and shifted masks for optimized boundary detection.
 
 use std::sync::OnceLock;
 
@@ -12,7 +24,11 @@ use std::sync::OnceLock;
 ///
 /// These masks are derived from the FastCDC paper (Algorithm 1) and use zero-padding
 /// to enlarge the effective sliding window size, improving deduplication ratio.
-/// The masks have distributed '1' bits rather than contiguous low bits.
+///
+/// The masks have distributed '1' bits rather than contiguous low bits, which provides:
+/// - Better random distribution of boundary positions
+/// - Higher deduplication ratio for similar data
+/// - More predictable chunk size distribution
 ///
 /// Indexed by log2(chunk_size), i.e., MASKS[13] is for 8KB chunks (2^13).
 const MASKS: [u64; 32] = [
@@ -51,7 +67,10 @@ const MASKS: [u64; 32] = [
 ];
 
 /// Gear hash table for FastCDC (pre-computed).
-/// These values are derived from a pseudo-random sequence using LCG.
+///
+/// The gear hash is a rolling hash that uses a lookup table to quickly update
+/// the hash value as new bytes are processed. These values are derived from a
+/// pseudo-random sequence using a Linear Congruential Generator (LCG).
 fn gear_table() -> &'static [u64; 256] {
     static TABLE: OnceLock<[u64; 256]> = OnceLock::new();
     TABLE.get_or_init(|| {
@@ -69,7 +88,9 @@ fn gear_table() -> &'static [u64; 256] {
 }
 
 /// Pre-shifted gear table for optimized hashing.
-/// Each entry is gear_table[i] << 1, avoiding runtime shifts.
+///
+/// Each entry is `gear_table[i] << 1`, avoiding runtime shifts during the
+/// hot path of the rolling hash computation.
 fn gear_table_shifted() -> &'static [u64; 256] {
     static TABLE: OnceLock<[u64; 256]> = OnceLock::new();
     TABLE.get_or_init(|| {
@@ -84,10 +105,36 @@ fn gear_table_shifted() -> &'static [u64; 256] {
 
 /// FastCDC rolling hash state.
 ///
-/// This implementation uses:
-/// - Pre-computed zero-padded masks for better deduplication (from FastCDC paper)
-/// - Dual gear tables (normal and shifted) for faster hashing
-/// - Normalized chunking with two-stage masks
+/// Maintains the state for processing a byte stream and identifying content-defined
+/// chunk boundaries using the FastCDC algorithm.
+///
+/// # Algorithm Details
+///
+/// The implementation uses several optimizations from the FastCDC paper:
+///
+/// - **Pre-computed zero-padded masks**: Better deduplication ratio than simple masks
+/// - **Dual gear tables**: Pre-shifted table avoids runtime bit shifts
+/// - **Normalized chunking**: Two-stage masks (MaskS and MaskL) for size distribution
+///
+/// # Size Constraints
+///
+/// - `min_size`: Minimum chunk size - no boundaries before this point
+/// - `avg_size`: Target chunk size - boundary detection adjusts around this
+/// - `max_size`: Maximum chunk size - forces a boundary if reached
+///
+/// # Example
+///
+/// ```ignore
+/// use chunkrs::cdc::FastCdc;
+///
+/// let mut cdc = FastCdc::new(4096, 16384, 65536);
+///
+/// for byte in data {
+///     if cdc.update(byte) {
+///         println!("Boundary found!");
+///     }
+/// }
+/// ```
 #[derive(Debug, Clone)]
 pub struct FastCdc {
     /// Current hash value.
@@ -106,18 +153,32 @@ pub struct FastCdc {
     bytes_since_boundary: usize,
 
     /// The mask for normal chunks (based on avg_size, harder to match).
-    /// Uses distributed bits (zero-padded) for better deduplication ratio.
+    ///
+    /// This mask has more bits set, making it harder for (hash & mask) == 0 to match.
+    /// This reduces the number of small chunks.
     mask_s: u64,
 
     /// The mask for larger chunks (based on max_size, easier to match).
-    /// Uses distributed bits (zero-padded) for better deduplication ratio.
+    ///
+    /// This mask has fewer bits set, making it easier for (hash & mask) == 0 to match.
+    /// This reduces the number of large chunks.
     mask_l: u64,
 }
 
 impl FastCdc {
     /// Creates a new FastCDC state with the given size constraints.
     ///
-    /// Uses normalization level 1 (mask adjustment by ±1 bit) as recommended in the paper.
+    /// # Arguments
+    ///
+    /// * `min_size` - Minimum chunk size (no boundaries before this)
+    /// * `avg_size` - Average/target chunk size
+    /// * `max_size` - Maximum chunk size (forces boundary if reached)
+    ///
+    /// # Normalization
+    ///
+    /// Uses normalization level 1 (mask adjustment by ±1 bit) as recommended
+    /// in the FastCDC paper. This provides the best balance between deduplication
+    /// ratio and performance.
     pub fn new(min_size: usize, avg_size: usize, max_size: usize) -> Self {
         // Get the bit position for avg_size
         let avg_bits = avg_size.trailing_zeros() as usize;
@@ -140,6 +201,9 @@ impl FastCdc {
     }
 
     /// Resets the state for a new stream.
+    ///
+    /// Clears the hash and byte counter, allowing the same `FastCdc` instance
+    /// to be reused for a new input stream.
     #[allow(dead_code)]
     pub(crate) fn reset(&mut self) {
         self.hash = 0;
@@ -148,8 +212,30 @@ impl FastCdc {
 
     /// Processes a single byte and returns true if a boundary was found.
     ///
-    /// Uses optimized dual gear tables for faster hashing and pre-shifted masks
-    /// for faster boundary detection.
+    /// This is the core method of the FastCDC algorithm. For each byte:
+    ///
+    /// 1. Updates the rolling hash using the gear hash algorithm
+    /// 2. Checks if minimum size has been reached
+    /// 3. Checks if maximum size has been exceeded (forces boundary)
+    /// 4. Uses normalized masks to detect boundaries based on current size
+    ///
+    /// # Returns
+    ///
+    /// `true` if a chunk boundary was found at this position, `false` otherwise.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use chunkrs::cdc::FastCdc;
+    ///
+    /// let mut cdc = FastCdc::new(4096, 16384, 65536);
+    ///
+    /// for byte in data {
+    ///     if cdc.update(byte) {
+    ///         println!("Boundary found!");
+    ///     }
+    /// }
+    /// ```
     pub fn update(&mut self, byte: u8) -> bool {
         self.bytes_since_boundary += 1;
 

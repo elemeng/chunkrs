@@ -1,19 +1,58 @@
-//! Chunk hash types.
+//! Cryptographic hash representation for chunk identity.
+//!
+//! This module defines [`ChunkHash`], a wrapper around a 32-byte BLAKE3 hash
+//! that provides methods for serialization, display, and comparison.
 
 use std::fmt;
 use std::hash::{Hash as StdHash, Hasher};
 
-/// A fixed-size hash value representing chunk content.
+/// A fixed-size cryptographic hash representing chunk content.
 ///
-/// This is a thin wrapper around a 32-byte array (BLAKE3 hash).
+/// `ChunkHash` is a newtype wrapper around a 32-byte array containing a
+/// BLAKE3 hash. It provides:
+///
+/// - Type safety to distinguish hashes from arbitrary byte arrays
+/// - Hex encoding/decoding for serialization
+/// - Display formatting for debugging and logging
+/// - Standard trait implementations for use in collections
+///
+/// # Example
+///
+/// ```
+/// use chunkrs::ChunkHash;
+///
+/// // Create from byte array
+/// let hash = ChunkHash::new([0u8; 32]);
+///
+/// // Convert to hex string
+/// let hex = hash.to_hex();
+/// assert_eq!(hex.len(), 64);
+///
+/// // Parse from hex string
+/// let parsed = ChunkHash::from_hex(&hex).unwrap();
+/// assert_eq!(hash, parsed);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ChunkHash([u8; 32]);
 
 impl ChunkHash {
-    /// The size of the hash in bytes.
+    /// The size of the hash in bytes (256 bits).
     pub const SIZE: usize = 32;
 
     /// Creates a new chunk hash from a byte array.
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes` - A 32-byte array containing the hash value
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chunkrs::ChunkHash;
+    ///
+    /// let bytes = [0u8; 32];
+    /// let hash = ChunkHash::new(bytes);
+    /// ```
     pub const fn new(bytes: [u8; 32]) -> Self {
         Self(bytes)
     }
@@ -21,6 +60,22 @@ impl ChunkHash {
     /// Creates a new chunk hash from a slice.
     ///
     /// Returns `None` if the slice is not exactly 32 bytes.
+    ///
+    /// # Arguments
+    ///
+    /// * `slice` - A slice containing the hash bytes
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chunkrs::ChunkHash;
+    ///
+    /// let bytes = vec![0u8; 32];
+    /// let hash = ChunkHash::from_slice(&bytes).unwrap();
+    ///
+    /// // Wrong size returns None
+    /// assert!(ChunkHash::from_slice(&[0u8; 31]).is_none());
+    /// ```
     pub fn from_slice(slice: &[u8]) -> Option<Self> {
         if slice.len() != 32 {
             return None;
@@ -30,12 +85,36 @@ impl ChunkHash {
         Some(Self(bytes))
     }
 
-    /// Returns the hash as a byte slice.
+    /// Returns the hash as a byte array reference.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chunkrs::ChunkHash;
+    ///
+    /// let bytes = [0u8; 32];
+    /// let hash = ChunkHash::new(bytes);
+    /// assert_eq!(hash.as_bytes(), &bytes);
+    /// ```
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.0
     }
 
-    /// Returns the hash as a hex string.
+    /// Returns the hash as a hexadecimal string.
+    ///
+    /// The output uses lowercase hex digits and is always 64 characters long.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chunkrs::ChunkHash;
+    ///
+    /// let bytes = [0xABu8; 32];
+    /// let hash = ChunkHash::new(bytes);
+    /// let hex = hash.to_hex();
+    /// assert_eq!(hex.len(), 64);
+    /// assert!(hex.chars().all(|c| c == 'a' || c == 'b'));
+    /// ```
     pub fn to_hex(&self) -> String {
         const HEX: &[u8; 16] = b"0123456789abcdef";
         let mut result = String::with_capacity(64);
@@ -46,9 +125,29 @@ impl ChunkHash {
         result
     }
 
-    /// Creates a hash from a hex string.
+    /// Creates a hash from a hexadecimal string.
     ///
-    /// Returns `None` if the string is not valid hex or not exactly 64 characters.
+    /// Returns `None` if the string is not valid hexadecimal or not exactly
+    /// 64 characters long.
+    ///
+    /// # Arguments
+    ///
+    /// * `hex_str` - A 64-character hex string
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chunkrs::ChunkHash;
+    ///
+    /// let hash = ChunkHash::new([0u8; 32]);
+    /// let hex = hash.to_hex();
+    ///
+    /// let parsed = ChunkHash::from_hex(&hex).unwrap();
+    /// assert_eq!(hash, parsed);
+    ///
+    /// // Invalid input returns None
+    /// assert!(ChunkHash::from_hex("not hex").is_none());
+    /// ```
     pub fn from_hex(hex_str: &str) -> Option<Self> {
         if hex_str.len() != 64 {
             return None;

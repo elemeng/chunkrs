@@ -1,4 +1,26 @@
 //! Async stream adapter for chunking.
+//!
+//! This module provides asynchronous chunking using the `futures-io::AsyncRead`
+//! trait, making it runtime-agnostic and compatible with tokio, async-std,
+//! smol, and other async runtimes.
+//!
+//! # Example
+//!
+//! ```ignore
+//! use futures_util::StreamExt;
+//! use chunkrs::{chunk_async, ChunkConfig};
+//! use futures_io::AsyncRead;
+//!
+//! async fn demo<R: AsyncRead + Unpin>(reader: R) -> Result<(), chunkrs::ChunkError> {
+//!     let mut stream = chunk_async(reader, ChunkConfig::default());
+//!
+//!     while let Some(chunk) = stream.next().await {
+//!         let chunk = chunk?;
+//!         println!("Chunk: {} bytes", chunk.len());
+//!     }
+//!     Ok(())
+//! }
+//! ```
 
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -53,6 +75,9 @@ pin_project! {
 }
 
 /// Hasher state stored outside the pinned struct.
+///
+/// This wrapper allows the hasher to be conditionally compiled while
+/// maintaining compatibility with the pinned `ChunkStream` struct.
 #[cfg(feature = "hash-blake3")]
 struct HasherState {
     hasher: Option<Blake3Hasher>,
@@ -63,6 +88,7 @@ struct HasherState;
 
 #[cfg(feature = "hash-blake3")]
 impl HasherState {
+    /// Creates a new hasher state based on the configuration.
     fn new(config: &ChunkConfig) -> Self {
         Self {
             hasher: if config.hash_config().enabled {
@@ -73,6 +99,7 @@ impl HasherState {
         }
     }
 
+    /// Hashes a chunk if hashing is enabled.
     fn hash_chunk(&mut self, data: &Bytes) -> Option<crate::chunk::ChunkHash> {
         self.hasher.as_mut().map(|h| {
             h.update(data);
@@ -85,16 +112,21 @@ impl HasherState {
 
 #[cfg(not(feature = "hash-blake3"))]
 impl HasherState {
+    /// Creates a new hasher state (no-op when hashing is disabled).
     fn new(_config: &ChunkConfig) -> Self {
         Self
     }
 
+    /// Hashes a chunk (always returns None when hashing is disabled).
     fn hash_chunk(&mut self, _data: &Bytes) -> Option<crate::chunk::ChunkHash> {
         None
     }
 }
 
 /// Chunk stream with hasher state.
+///
+/// This type combines the chunk stream with optional hashing support.
+/// It implements the `Stream` trait, yielding chunks asynchronously.
 pub struct ChunkStreamWithHasher<R> {
     inner: ChunkStream<R>,
     hasher: HasherState,
@@ -102,6 +134,11 @@ pub struct ChunkStreamWithHasher<R> {
 
 impl<R> ChunkStreamWithHasher<R> {
     /// Creates a new chunk stream from an async reader.
+    ///
+    /// # Arguments
+    ///
+    /// * `reader` - An async reader implementing `AsyncRead`
+    /// * `config` - The chunking configuration
     pub fn new(reader: R, config: ChunkConfig) -> Self {
         let inner = ChunkStream {
             reader,
@@ -184,6 +221,9 @@ impl<R: AsyncRead + Unpin> Stream for ChunkStreamWithHasher<R> {
 
 impl<R> ChunkStreamWithHasher<R> {
     /// Processes the chunk buffer and returns a chunk.
+    ///
+    /// This internal method extracts a chunk from the buffer, computes its
+    /// hash if enabled, and updates the offset.
     fn emit_chunk(&mut self, len: usize) -> Chunk {
         let data = Bytes::copy_from_slice(&self.inner.chunk_buffer[..len]);
         let chunk_offset = self.inner.offset;
@@ -215,6 +255,8 @@ impl<R> ChunkStreamWithHasher<R> {
 /// Uses `futures_io::AsyncRead` for runtime-agnostic async I/O.
 /// This works with any async runtime (tokio, async-std, smol, etc.).
 ///
+/// # Runtime Compatibility
+///
 /// For tokio users, you can use `tokio_util::compat` to convert
 /// `tokio::io::AsyncRead` to `futures_io::AsyncRead`:
 ///
@@ -243,6 +285,15 @@ impl<R> ChunkStreamWithHasher<R> {
 ///     Ok(())
 /// }
 /// ```
+///
+/// # Arguments
+///
+/// * `reader` - An async reader implementing `AsyncRead`
+/// * `config` - The chunking configuration
+///
+/// # Returns
+///
+/// A `ChunkStreamWithHasher` that implements `Stream<Item = Result<Chunk, ChunkError>>`
 pub fn chunk_async<R: AsyncRead>(reader: R, config: ChunkConfig) -> ChunkStreamWithHasher<R> {
     ChunkStreamWithHasher::new(reader, config)
 }
