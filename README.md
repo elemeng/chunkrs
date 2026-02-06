@@ -4,9 +4,11 @@
 
 > **Deterministic, streaming Content-Defined Chunking (CDC) for Rust**
 
-`chunkrs` provides byte-stream chunking for delta synchronization, deduplication, and content-addressable storage. It prioritizes **correctness, determinism, and composability** over clever parallelism tricks.
+`chunkrs` is a high-performance, portable infrastructure library for FastCDC chunking and cryptographic hashing.
 
-**Core principle**: *CDC is inherently serial—parallelize at the application level, not within the stream.*
+> **Bytes in → Chunks & hashes out.**
+
+Zero-copy streaming. Async-agnostic. Excellent for any chunking and hashing use case.
 
 ## Features
 
@@ -17,17 +19,6 @@
 - **BLAKE3 identity**: Cryptographic chunk hashing (optional, incremental)
 - **Runtime-agnostic async**: Works with Tokio, async-std, or any `futures-io` runtime
 - **Strictly safe**: `#![forbid(unsafe_code)]`
-
-## When to Use chunkrs
-
-| Scenario | Recommendation |
-|----------|---------------|
-| Delta sync (rsync-style) | ✅ Perfect fit |
-| Backup tools | ✅ Ideal for single-stream chunking |
-| Deduplication (CAS) | ✅ Use with your own index |
-| NVMe Gen4/5 saturation | ✅ 3–5 GB/s per core |
-| Distributed dedup | ✅ Stateless, easy to distribute |
-| Any other CDC use case | ✅ Likely fits |
 
 ## Architecture
 
@@ -49,6 +40,17 @@ chunkrs processes **one logical byte stream at a time** with strictly serial CDC
     └─────────────┘       │ }                 │
                           └───────────────────┘   
 ```
+
+## When to Use chunkrs
+
+| Scenario | Recommendation |
+|----------|---------------|
+| Delta sync (rsync-style) | ✅ Perfect fit |
+| Backup tools | ✅ Ideal for single-stream chunking |
+| Deduplication (CAS) | ✅ Use with your own index |
+| NVMe Gen4/5 saturation | ✅ 3–5 GB/s per core |
+| Distributed dedup | ✅ Stateless, easy to distribute |
+| Any other CDC use case | ✅ Likely fits |
 
 ## Quick Start
 
