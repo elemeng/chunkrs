@@ -249,25 +249,57 @@ chunkrs = { version = "0.1", default-features = false }
 chunkrs = { version = "0.1", features = ["async-io"] }
 ```
 
-
 ## Roadmap
 
-**Version 0.8.0 — Cautious Development Phase**
+**Current:** 0.8.0 — Core API stable, seeking production feedback.
 
-The core design and APIs are almost matured. Breaking changes will be rare and clearly communicated.
+| Version | Focus | Guarantees |
+|---------|-------|------------|
+| **0.1** | Hardening | Fuzzing, Miri, cross-platform validation |
+| **0.8–0.9** | API Freeze | No breaking changes; docs & examples only |
+| **1.0.0** | Stable Release | SemVer commitment; MSRV 2-year support |
 
-### Future Work
+**Post-1.0 (Additive only):**
 
-**0.9.x:** Enhanced error reporting, more examples, expanded benchmarks
+- SIMD optimizations (AVX2/AVX-512)
+- Alternative hashes (xxHash)
+- `no_std` support
 
-**1.0.0:** Additional hash algorithms (xxHash, SHA-256), configurable buffer pools, custom allocators
+**Non-Goals:** Networking, encryption, compression — handle these in your application layer or companion crates.
 
-**Explorations:** SIMD optimization, hardware acceleration, advanced CDC variants
-
-### Version Policy
-
-- **0.8.x**: API stability focus
-- **0.9.x**: Feature stabilization
-- **1.0.0**: Stable release
+**Version Policy:** Pre-1.0 allows API refinement based on usage. 1.0+ maintains backward compatibility; deprecations undergo 12-month notice period.
 
 Feedback welcome at [GitHub Issues](https://github.com/elemeng/chunkrs/issues).
+
+## Key Architectural Decisions
+
+1. **Application provides the byte stream**: The library accepts any `std::io::Read` or `futures_io::AsyncRead`. Whether the bytes come from a file, network socket, or in-memory buffer is entirely the application's concern. The library focuses solely on the CDC transformation.
+
+2. **Batching for I/O efficiency**: Internally reads data in ~8KB buffers to balance syscall overhead with cache-friendly processing, while maintaining CDC state across buffer boundaries for deterministic results.
+
+3. **Application-level concurrency**: Parallelize by running multiple `chunkrs` instances on different streams. The library stays out of your thread pool.
+
+4. **Allocation discipline**: No global buffer pools. Thread-local caches prevent allocator lock contention when processing thousands of small streams. Global buffer pools (`lazy_static!` pools) cause cache line bouncing and atomic contention under high concurrency. chunkrs uses **thread-local caches**—zero synchronization, maximum locality.
+
+## Acknowledgments
+
+This crate implements the FastCDC algorithm described in:
+
+> Wen Xia, Yukun Zhou, Hong Jiang, Dan Feng, Yu Hua, Yuchong Hu, Yuchong Zhang, Qing Liu,  
+> **"FastCDC: a Fast and Efficient Content-Defined Chunking Approach for Data Deduplication"**,  
+> in Proceedings of USENIX Annual Technical Conference (USENIX ATC'16), Denver, CO, USA, June 22–24, 2016, pages: 101-114.  
+> [Paper Link](https://www.usenix.org/conference/atc16/technical-sessions/presentation/xia)
+
+> Wen Xia, Xiangyu Zou, Yukun Zhou, Hong Jiang, Chuanyi Liu, Dan Feng, Yu Hua, Yuchong Hu, Yuchong Zhang,  
+> **"The Design of Fast Content-Defined Chunking for Data Deduplication based Storage Systems"**,  
+> IEEE Transactions on Parallel and Distributed Systems (TPDS), 2020.
+
+This crate is inspired by the original [fastcdc](https://crates.io/crates/fastcdc) crate but focuses on a modernized API with streaming-first design, strict determinism, and allocation-conscious internals.
+
+## License
+
+MIT License — see [LICENSE](LICENSE)
+
+## Contributing
+
+Issues and pull requests welcome at [https://github.com/elemeng/chunkrs](https://github.com/elemeng/chunkrs)
