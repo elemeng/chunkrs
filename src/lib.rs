@@ -20,18 +20,21 @@
 //!
 //! # Sync
 //!
-//! ```no_run
-//! use std::fs::File;
+//! ```
+//! use std::io::Cursor;
 //! use chunkrs::{Chunker, ChunkConfig, ChunkError};
 //!
 //! fn main() -> Result<(), ChunkError> {
-//!     let file = File::open("data.bin")?;
+//!     let data = vec![0u8; 1024];
+//!     let cursor = Cursor::new(data);
 //!     let chunker = Chunker::new(ChunkConfig::default());
 //!
-//!     for chunk in chunker.chunk(file) {
+//!     let mut chunk_count = 0;
+//!     for chunk in chunker.chunk(cursor) {
 //!         let chunk = chunk?;
-//!         println!("chunk {} bytes", chunk.data.len());
+//!         chunk_count += 1;
 //!     }
+//!     assert!(chunk_count > 0, "Should produce at least one chunk");
 //!     Ok(())
 //! }
 //! ```
@@ -41,15 +44,17 @@
 //! ```ignore
 //! use futures_util::StreamExt;
 //! use chunkrs::{chunk_async, ChunkConfig};
-//! use tokio::io::AsyncRead;
+//! use futures_io::AsyncRead;
 //!
 //! async fn demo<R: AsyncRead + Unpin>(reader: R) -> Result<(), chunkrs::ChunkError> {
 //!     let mut stream = chunk_async(reader, ChunkConfig::default());
+//!     let mut chunk_count = 0;
 //!
 //!     while let Some(chunk) = stream.next().await {
 //!         let chunk = chunk?;
-//!         println!("chunk {}", chunk.data.len());
+//!         chunk_count += 1;
 //!     }
+//!     assert!(chunk_count > 0, "Should produce at least one chunk");
 //!     Ok(())
 //! }
 //! ```

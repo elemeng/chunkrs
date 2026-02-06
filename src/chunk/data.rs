@@ -98,6 +98,21 @@ impl Chunk {
         self.hash
     }
 
+    /// Returns the start offset (0 if not set).
+    pub fn start(&self) -> u64 {
+        self.offset.unwrap_or(0)
+    }
+
+    /// Returns the end offset (exclusive).
+    pub fn end(&self) -> u64 {
+        self.start() + self.data.len() as u64
+    }
+
+    /// Returns the chunk as a range.
+    pub fn range(&self) -> std::ops::Range<u64> {
+        self.start()..self.end()
+    }
+
     /// Consumes the chunk and returns the underlying data.
     pub fn into_data(self) -> Bytes {
         self.data
@@ -187,5 +202,41 @@ mod tests {
         let s = format!("{}", chunk);
         assert!(s.contains("5 bytes"));
         assert!(s.contains("@ 100"));
+    }
+
+    #[test]
+    fn test_start_with_offset() {
+        let chunk = Chunk::with_offset(&b"hello"[..], 100);
+        assert_eq!(chunk.start(), 100);
+    }
+
+    #[test]
+    fn test_start_without_offset() {
+        let chunk = Chunk::new(&b"hello"[..]);
+        assert_eq!(chunk.start(), 0);
+    }
+
+    #[test]
+    fn test_end() {
+        let chunk = Chunk::with_offset(&b"hello"[..], 100);
+        assert_eq!(chunk.end(), 105);
+    }
+
+    #[test]
+    fn test_end_without_offset() {
+        let chunk = Chunk::new(&b"hello"[..]);
+        assert_eq!(chunk.end(), 5);
+    }
+
+    #[test]
+    fn test_range() {
+        let chunk = Chunk::with_offset(&b"hello"[..], 100);
+        assert_eq!(chunk.range(), 100..105);
+    }
+
+    #[test]
+    fn test_range_without_offset() {
+        let chunk = Chunk::new(&b"hello"[..]);
+        assert_eq!(chunk.range(), 0..5);
     }
 }
