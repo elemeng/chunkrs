@@ -253,6 +253,10 @@ chunkrs = { version = "0.8", features = ["async-io"] }
 
 **Current:** 0.8.0 — Core API stable, comprehensive feature set, seeking production feedback.
 
+```text
+Note: bumped version to 0.8.0 because design, APIs, features are almost matured.
+```
+
 ### Implemented ✅
 
 **Core Functionality:**
@@ -311,7 +315,8 @@ We're actively seeking feedback on:
 
 Open issues or discussions at [GitHub Issues](https://github.com/elemeng/chunkrs/issues). Issues and pull requests are welcome.
 
-**Reference**: [ARCHITECTURE.md](ARCHITECTURE.md) — Design and implementation details.
+- Refer [ARCHITECTURE.md](ARCHITECTURE.md) for **Design** and **implementation** details.
+- See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## Acknowledgments
 
