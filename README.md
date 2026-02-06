@@ -256,28 +256,19 @@ chunkrs = { version = "0.1", features = ["async-io"] }
 ### Implemented ✅
 
 **Core Functionality:**
-- FastCDC rolling hash algorithm with configurable min/avg/max chunk sizes
-- Synchronous streaming via `std::io::Read`
-- Asynchronous streaming via `futures-io::AsyncRead` (runtime-agnostic: Tokio, async-std, smol)
-- BLAKE3 cryptographic hashing for chunk identity
-- Thread-local buffer pools for zero-allocation hot path
-- Deterministic chunking across batch sizes and execution timings
+
+- FastCDC rolling hash, sync, async I/O, zero-copy, BLAKE3 hashing, thread-local buffer pools, deterministic chunking
 
 **Quality & Safety:**
-- 45 unit tests + 40 doctests
-- Fuzzing harness for property-based testing
-- `#![forbid(unsafe_code)]` — strictly safe Rust
-- No clippy warnings with `-D warnings`
-- Rust 2024 edition best practices
 
-**Documentation:**
-- Comprehensive module, struct, and method documentation
-- 4 working examples (sync_basic, sync_file, async_tokio, async_stream)
-- Detailed algorithm explanations and design rationale
+- 45 unit tests + 40 doctests, fuzzing, no `unsafe`
+- documents and example
+- benchmarks
 
 ### Planned Enhancements
 
 **0.9.x — Production Hardening:**
+
 - Extended cross-platform testing (Windows, macOS, Linux variants)
 - Additional fuzzing targets for edge cases
 - Miri validation for memory safety
@@ -285,6 +276,7 @@ chunkrs = { version = "0.1", features = ["async-io"] }
 - Enhanced error messages with context
 
 **1.0.0 — Stable Release:**
+
 - Alternative hash algorithms (xxHash for speed, SHA-256 for compatibility)
 - Configurable buffer pool sizes for memory-constrained environments
 - Custom allocator support for specialized use cases
@@ -292,6 +284,7 @@ chunkrs = { version = "0.1", features = ["async-io"] }
 - Comprehensive integration guide and production deployment patterns
 
 **Post-1.0 — Additive Features Only:**
+
 - SIMD optimizations (AVX2/AVX-512) for rolling hash
 - Hardware-accelerated hashing (BLAKE3 SIMD, SHA-NI)
 - Advanced CDC algorithm variants (e.g., pattern-aware chunking)
@@ -307,37 +300,18 @@ These features are intentionally out of scope:
 - **Deduplication indexing**: Use companion crates (CAS index implementations)
 - **Distributed coordination**: Manage at application level
 
-### Version Policy
-
-**Pre-1.0 (0.8.x – 0.9.x):**
-- API refinement based on real-world usage feedback
-- Breaking changes communicated clearly in changelogs
-- Focus on stability and production readiness
-
-**1.0.0+:**
-- Strict SemVer compliance
-- Breaking changes only for security issues
-- Deprecation cycle: 12-month notice before removal
-- Minimum Rust Version (MSRV) supported for 2 years
-
 ### Feedback & Contributions
 
 We're actively seeking feedback on:
+
 - Real-world deployment patterns and performance characteristics
 - Edge cases and failure modes in production
 - Integration patterns with storage systems and databases
 - Feature requests that align with CDC use cases
 
-Open issues or discussions at [GitHub Issues](https://github.com/elemeng/chunkrs/issues).
+Open issues or discussions at [GitHub Issues](https://github.com/elemeng/chunkrs/issues). Issues and pull requests are welcome.
 
-
-1. **Application provides the byte stream**: The library accepts any `std::io::Read` or `futures_io::AsyncRead`. Whether the bytes come from a file, network socket, or in-memory buffer is entirely the application's concern. The library focuses solely on the CDC transformation.
-
-2. **Batching for I/O efficiency**: Internally reads data in ~8KB buffers to balance syscall overhead with cache-friendly processing, while maintaining CDC state across buffer boundaries for deterministic results.
-
-3. **Application-level concurrency**: Parallelize by running multiple `chunkrs` instances on different streams. The library stays out of your thread pool.
-
-4. **Allocation discipline**: No global buffer pools. Thread-local caches prevent allocator lock contention when processing thousands of small streams. Global buffer pools (`lazy_static!` pools) cause cache line bouncing and atomic contention under high concurrency. chunkrs uses **thread-local caches**—zero synchronization, maximum locality.
+**Reference**: [ARCHITECTURE.md](ARCHITECTURE.md) — Design and implementation details.
 
 ## Acknowledgments
 
@@ -357,7 +331,3 @@ This crate is inspired by the original [fastcdc](https://crates.io/crates/fastcd
 ## License
 
 MIT License — see [LICENSE](LICENSE)
-
-## Contributing
-
-Issues and pull requests welcome at [https://github.com/elemeng/chunkrs](https://github.com/elemeng/chunkrs)

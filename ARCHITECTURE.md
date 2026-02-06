@@ -301,3 +301,13 @@ It avoids clever parallel tricks in favor of:
 
 If you need orchestration — build it *around* `chunkrs`.
 If you need chunking — `chunkrs` stays out of your way.
+
+## Note about arch decision
+
+1. **Application provides the byte stream**: The library accepts any `std::io::Read` or `futures_io::AsyncRead`. Whether the bytes come from a file, network socket, or in-memory buffer is entirely the application's concern. The library focuses solely on the CDC transformation.
+
+2. **Batching for I/O efficiency**: Internally reads data in ~8KB buffers to balance syscall overhead with cache-friendly processing, while maintaining CDC state across buffer boundaries for deterministic results.
+
+3. **Application-level concurrency**: Parallelize by running multiple `chunkrs` instances on different streams. The library stays out of your thread pool.
+
+4. **Allocation discipline**: No global buffer pools. Thread-local caches prevent allocator lock contention when processing thousands of small streams. Global buffer pools (`lazy_static!` pools) cause cache line bouncing and atomic contention under high concurrency. chunkrs uses **thread-local caches**—zero synchronization, maximum locality.
