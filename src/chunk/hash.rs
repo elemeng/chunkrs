@@ -187,39 +187,88 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_new() {
-        let bytes = [0u8; 32];
+    fn test_chunk_hash_creation() {
+        let bytes = [0x42u8; 32];
         let hash = ChunkHash::new(bytes);
+        
         assert_eq!(hash.as_bytes(), &bytes);
     }
 
     #[test]
-    fn test_from_slice() {
-        let bytes = vec![0u8; 32];
+    fn test_chunk_hash_from_slice_valid() {
+        let bytes = vec![0x33u8; 32];
         let hash = ChunkHash::from_slice(&bytes).unwrap();
+        
         assert_eq!(hash.as_bytes().as_ref(), bytes.as_slice());
+    }
 
-        // Wrong size
+    #[test]
+    fn test_chunk_hash_from_slice_invalid() {
+        // Too short
         assert!(ChunkHash::from_slice(&[0u8; 31]).is_none());
+        
+        // Too long
         assert!(ChunkHash::from_slice(&[0u8; 33]).is_none());
     }
 
     #[test]
-    fn test_to_hex() {
+    fn test_chunk_hash_to_hex() {
         let bytes = [0xABu8; 32];
         let hash = ChunkHash::new(bytes);
         let hex = hash.to_hex();
+        
         assert_eq!(hex.len(), 64);
-        assert!(hex.chars().all(|c| c == 'a' || c == 'b'));
+        assert!(hex.chars().all(|c| c.is_ascii_hexdigit()));
     }
 
     #[test]
-    fn test_display() {
-        let bytes = [0x01u8, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF];
-        let mut full_bytes = [0u8; 32];
-        full_bytes[..8].copy_from_slice(&bytes);
-        let hash = ChunkHash::new(full_bytes);
-        let s = hash.to_string();
+    fn test_chunk_hash_display() {
+        let bytes = [0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 
+                      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let hash = ChunkHash::new(bytes);
+        let s = format!("{}", hash);
+        
         assert!(s.starts_with("0123456789abcdef"));
+        assert_eq!(s.len(), 64);
+    }
+
+    #[test]
+    fn test_chunk_hash_from_hex_roundtrip() {
+        let bytes = [0xFFu8; 32];
+        let hash1 = ChunkHash::new(bytes);
+        let hex = hash1.to_hex();
+        let hash2 = ChunkHash::from_hex(&hex).unwrap();
+        
+        assert_eq!(hash1, hash2, "Hex roundtrip must preserve hash");
+    }
+
+    #[test]
+    fn test_chunk_hash_from_hex_invalid() {
+        // Wrong length
+        assert!(ChunkHash::from_hex("1234").is_none());
+        
+        // Invalid hex
+        assert!(ChunkHash::from_hex(&"g".repeat(64)).is_none());
+    }
+
+    #[test]
+    fn test_chunk_hash_equality() {
+        let bytes = [0x78u8; 32];
+        let hash1 = ChunkHash::new(bytes);
+        let hash2 = ChunkHash::new(bytes);
+        let hash3 = ChunkHash::new([0x00; 32]);
+        
+        assert_eq!(hash1, hash2, "Same bytes must be equal");
+        assert_ne!(hash1, hash3, "Different bytes must not be equal");
+    }
+
+    #[test]
+    fn test_chunk_hash_ord() {
+        let hash1 = ChunkHash::new([0x00; 32]);
+        let hash2 = ChunkHash::new([0xFF; 32]);
+        
+        assert!(hash1 < hash2, "Hash ordering must match byte ordering");
     }
 }

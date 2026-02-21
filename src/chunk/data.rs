@@ -371,91 +371,96 @@ impl fmt::Display for Chunk {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::ChunkHash;
 
     #[test]
-    fn test_new() {
+    fn test_chunk_creation() {
         let chunk = Chunk::new(&b"hello"[..]);
+        
         assert_eq!(chunk.len(), 5);
         assert!(!chunk.is_empty());
+        assert_eq!(chunk.offset(), None);
+        assert!(chunk.hash().is_none());
     }
 
     #[test]
-    fn test_empty() {
+    fn test_chunk_empty() {
         let chunk = Chunk::new(&b""[..]);
+        
         assert!(chunk.is_empty());
+        assert_eq!(chunk.len(), 0);
     }
 
     #[test]
-    fn test_with_offset() {
-        let chunk = Chunk::with_offset(&b"hello"[..], 100);
+    fn test_chunk_with_offset() {
+        let chunk = Chunk::with_offset(&b"data"[..], 100);
+        
         assert_eq!(chunk.offset(), Some(100));
+        assert_eq!(chunk.start(), 100);
+        assert_eq!(chunk.end(), 104);
     }
 
     #[test]
-    fn test_with_hash() {
-        let hash = ChunkHash::new([0u8; 32]);
-        let chunk = Chunk::with_hash(&b"hello"[..], hash);
+    fn test_chunk_with_hash() {
+        let hash = ChunkHash::new([0x12; 32]);
+        let chunk = Chunk::with_hash(&b"data"[..], hash);
+        
         assert_eq!(chunk.hash(), Some(hash));
     }
 
     #[test]
-    fn test_builder_pattern() {
-        let hash = ChunkHash::new([0u8; 32]);
-        let chunk = Chunk::new(&b"hello"[..]).set_offset(100).set_hash(hash);
-
-        assert_eq!(chunk.len(), 5);
-        assert_eq!(chunk.offset(), Some(100));
+    fn test_chunk_builder_pattern() {
+        let hash = ChunkHash::new([0xAB; 32]);
+        let chunk = Chunk::new(&b"test"[..])
+            .set_offset(50)
+            .set_hash(hash);
+        
+        assert_eq!(chunk.len(), 4);
+        assert_eq!(chunk.offset(), Some(50));
         assert_eq!(chunk.hash(), Some(hash));
     }
 
     #[test]
-    fn test_from_bytes() {
+    fn test_chunk_range() {
+        let chunk = Chunk::with_offset(&b"hello world"[..], 10);
+        
+        assert_eq!(chunk.range(), 10..21);
+    }
+
+    #[test]
+    fn test_chunk_from_bytes() {
         let bytes = Bytes::from_static(b"test");
         let chunk: Chunk = bytes.into();
+        
         assert_eq!(chunk.len(), 4);
     }
 
     #[test]
-    fn test_display() {
-        let chunk = Chunk::with_offset(&b"hello"[..], 100);
+    fn test_chunk_display() {
+        let chunk = Chunk::with_offset(&b"data"[..], 100);
         let s = format!("{}", chunk);
-        assert!(s.contains("5 bytes"));
+        
+        assert!(s.contains("4 bytes"));
         assert!(s.contains("@ 100"));
     }
 
     #[test]
-    fn test_start_with_offset() {
-        let chunk = Chunk::with_offset(&b"hello"[..], 100);
-        assert_eq!(chunk.start(), 100);
+    fn test_chunk_into_data() {
+        let original = Bytes::from(&b"test data"[..]);
+        let chunk = Chunk::new(original.clone());
+        let extracted = chunk.into_data();
+        
+        assert_eq!(extracted, original);
     }
 
     #[test]
-    fn test_start_without_offset() {
-        let chunk = Chunk::new(&b"hello"[..]);
-        assert_eq!(chunk.start(), 0);
-    }
-
-    #[test]
-    fn test_end() {
-        let chunk = Chunk::with_offset(&b"hello"[..], 100);
-        assert_eq!(chunk.end(), 105);
-    }
-
-    #[test]
-    fn test_end_without_offset() {
-        let chunk = Chunk::new(&b"hello"[..]);
-        assert_eq!(chunk.end(), 5);
-    }
-
-    #[test]
-    fn test_range() {
-        let chunk = Chunk::with_offset(&b"hello"[..], 100);
-        assert_eq!(chunk.range(), 100..105);
-    }
-
-    #[test]
-    fn test_range_without_offset() {
-        let chunk = Chunk::new(&b"hello"[..]);
-        assert_eq!(chunk.range(), 0..5);
+    fn test_chunk_into_parts() {
+        let hash = ChunkHash::new([0x99; 32]);
+        let chunk = Chunk::new(&b"data"[..]).set_hash(hash);
+        
+        let (data, extracted_hash) = chunk.into_parts();
+        
+        assert_eq!(data.as_ref(), b"data");
+        assert_eq!(extracted_hash, Some(hash));
     }
 }

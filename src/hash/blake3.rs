@@ -10,6 +10,7 @@
 //! - **Deterministic**: Same input always produces the same hash
 //! - **Incremental**: Supports streaming updates for large data
 
+#[cfg(feature = "hash-blake3")]
 use crate::chunk::ChunkHash;
 
 /// A hasher that computes BLAKE3 hashes.
@@ -64,8 +65,7 @@ impl Blake3Hasher {
     /// # Arguments
     ///
     /// * `key` - A 32-byte key for the keyed hash
-    #[allow(dead_code)]
-    pub(crate) fn new_keyed(key: &[u8; 32]) -> Self {
+    pub fn new_keyed(key: &[u8; 32]) -> Self {
         Self {
             state: blake3::Hasher::new_keyed(key),
         }
@@ -89,7 +89,6 @@ impl Blake3Hasher {
     /// hasher.update(b"hello ");
     /// hasher.update(b"world");
     /// ```
-    #[allow(dead_code)]
     pub fn update(&mut self, data: &[u8]) {
         self.state.update(data);
     }
@@ -112,8 +111,7 @@ impl Blake3Hasher {
     /// hasher.update(b"hello world");
     /// let hash = hasher.finalize();
     /// ```
-    #[allow(dead_code)]
-    pub fn finalize(&self) -> ChunkHash {
+    pub(crate) fn finalize(&self) -> ChunkHash {
         ChunkHash::new(self.state.finalize().into())
     }
 
@@ -161,7 +159,6 @@ impl Blake3Hasher {
     ///
     /// let hash = Blake3Hasher::hash(b"hello world");
     /// ```
-    #[allow(dead_code)]
     pub(crate) fn hash(data: &[u8]) -> ChunkHash {
         ChunkHash::new(blake3::hash(data).into())
     }
@@ -176,19 +173,23 @@ impl Default for Blake3Hasher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ChunkHash;
 
     #[test]
-    fn test_hash() {
-        let hash = Blake3Hasher::hash(b"hello world");
-        assert_eq!(hash.as_bytes().len(), 32);
-
-        // Hash should be deterministic
+    fn test_hash_determinism() {
+        let hash1 = Blake3Hasher::hash(b"hello world");
         let hash2 = Blake3Hasher::hash(b"hello world");
-        assert_eq!(hash, hash2);
+        
+        assert_eq!(hash1, hash2, "Same input must produce same hash");
+        assert_eq!(hash1.as_bytes().len(), 32, "Hash must be 32 bytes");
+    }
 
-        // Different data should give different hash
-        let hash3 = Blake3Hasher::hash(b"hello world!");
-        assert_ne!(hash, hash3);
+    #[test]
+    fn test_hash_uniqueness() {
+        let hash1 = Blake3Hasher::hash(b"hello world");
+        let hash2 = Blake3Hasher::hash(b"hello world!");
+        
+        assert_ne!(hash1, hash2, "Different inputs must produce different hashes");
     }
 
     #[test]
@@ -196,23 +197,37 @@ mod tests {
         let mut hasher = Blake3Hasher::new();
         hasher.update(b"hello ");
         hasher.update(b"world");
-        let hash = hasher.finalize();
-
-        // Should match one-shot hashing
-        let expected = Blake3Hasher::hash(b"hello world");
-        assert_eq!(hash, expected);
+        let incremental_hash = hasher.finalize();
+        
+        let one_shot_hash = Blake3Hasher::hash(b"hello world");
+        
+        assert_eq!(incremental_hash, one_shot_hash, 
+                   "Incremental hashing must match one-shot hashing");
     }
 
     #[test]
-    fn test_reset() {
+    fn test_hasher_reset() {
         let mut hasher = Blake3Hasher::new();
-        hasher.update(b"some data");
-
+        hasher.update(b"first data");
         hasher.reset();
-        hasher.update(b"hello world");
-        let hash = hasher.finalize();
+        hasher.update(b"second data");
+        let hash2 = hasher.finalize();
+        
+        let expected = Blake3Hasher::hash(b"second data");
+        assert_eq!(hash2, expected, "Reset must clear previous state");
+    }
 
-        let expected = Blake3Hasher::hash(b"hello world");
-        assert_eq!(hash, expected);
+    #[test]
+    fn test_hasher_multiple_updates() {
+        let mut hasher = Blake3Hasher::new();
+        
+        // Multiple small updates
+        hasher.update(b"a");
+        hasher.update(b"b");
+        hasher.update(b"c");
+        let hash1 = hasher.finalize();
+        
+        let hash2 = Blake3Hasher::hash(b"abc");
+        assert_eq!(hash1, hash2, "Multiple updates must produce correct hash");
     }
 }

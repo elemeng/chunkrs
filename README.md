@@ -60,28 +60,38 @@ chunkrs = "0.8"
 ```
 
 ```rust
-use std::fs::File;
 use chunkrs::{Chunker, ChunkConfig};
+use bytes::Bytes;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let file = File::open("data.bin")?;
-    let chunker = Chunker::new(ChunkConfig::default());
+fn main() {
+    let mut chunker = Chunker::new(ChunkConfig::default());
+    let mut pending = Bytes::new();
 
-    for chunk in chunker.chunk(file) {
-        let chunk = chunk?;
-        println!("offset: {:?}, len: {}, hash: {:?}", 
-            chunk.offset, chunk.len(), chunk.hash);
+    // Feed data in any size (streaming)
+    for chunk in &[Bytes::from(&b"first part"[..]), 
+                    Bytes::from(&b"second part"[..])] {
+        let (chunks, leftover) = chunker.push(chunk);
+        // Process complete chunks...
+        for chunk in chunks {
+            println!("offset: {:?}, len: {}, hash: {:?}", 
+                chunk.offset, chunk.len(), chunk.hash);
+        }
+        pending = leftover;
     }
-    
-    Ok(())
+
+    // Finalize stream
+    if let Some(final_chunk) = chunker.finish() {
+        println!("Final chunk: offset: {:?}, len: {}, hash: {:?}", 
+            final_chunk.offset, final_chunk.len(), final_chunk.hash);
+    }
 }
 ```
 
-**What's in the Chunk Stream:**
+**What's in a Chunk:**
 
-Each element is a `Chunk` containing:
+Each `Chunk` contains:
 
-- **`data`**: `Bytes` — the actual chunk payload (zero-copy reference when possible) for subsequent use (e.g., writing to disk)
+- **`data`**: `Bytes` — the actual chunk payload (zero-copy reference when possible)
 - **`offset`**: `Option<u64>` — byte position in the original stream
 - **`hash`**: `Option<ChunkHash>` — BLAKE3 hash for content identity (if enabled)
 
@@ -91,60 +101,66 @@ Each element is a `Chunk` containing:
 
 | Type | Description |
 |------|-------------|
-| `Chunker` | Stateful CDC engine (maintains rolling hash across batches) |
+| `Chunker` | Stateful CDC engine with streaming push()/finish() API |
 | `Chunk` | Content-addressed block with `Bytes` payload and optional BLAKE3 hash |
 | `ChunkHash` | 32-byte BLAKE3 hash identifying chunk content |
 | `ChunkConfig` | Min/avg/max chunk sizes and hash configuration |
-| `ChunkIter` | Iterator over chunks (sync) |
 | `ChunkError` | Error type for chunking operations |
 
-### Synchronous Usage
+### Streaming API
+
+The `Chunker` provides a streaming API:
 
 ```rust
 use chunkrs::{Chunker, ChunkConfig};
+use bytes::Bytes;
 
-// From file
-let file = std::fs::File::open("data.bin")?;
-let chunker = Chunker::new(ChunkConfig::default());
-for chunk in chunker.chunk(file) {
-    let chunk = chunk?;
+let mut chunker = Chunker::new(ChunkConfig::default());
+let mut pending = Bytes::new();
+
+// Feed data in any size (1 byte to megabytes)
+let (chunks, leftover) = chunker.push(Bytes::from(&b"data"[..]));
+
+// Process complete chunks immediately
+for chunk in chunks {
     // chunk.data: Bytes - the chunk payload
     // chunk.offset: Option<u64> - position in original stream
     // chunk.hash: Option<ChunkHash> - BLAKE3 hash (if enabled)
 }
 
-// From memory
-let data: Vec<u8> = vec![0u8; 1024 * 1024];
-let chunks: Vec<_> = chunker.chunk_bytes(data);
-```
+// Feed leftover back in next push
+pending = leftover;
 
-### Asynchronous Usage
-
-Runtime-agnostic via `futures-io`:
-
-```rust
-use futures_util::StreamExt;
-use chunkrs::{ChunkConfig, ChunkError};
-
-async fn process<R: futures_io::AsyncRead + Unpin>(reader: R) -> Result<(), ChunkError> {
-    let mut stream = chunkrs::chunk_async(reader, ChunkConfig::default());
-    
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk?;
-        // Process
-    }
-    Ok(())
+// When stream ends, get final chunk
+if let Some(final_chunk) = chunker.finish() {
+    // Process final chunk
 }
 ```
 
-**Tokio compatibility:**
+### Determinism
+
+The same input produces identical chunks regardless of how data is fed:
 
 ```rust
-use tokio::fs::File;
-use tokio_util::compat::TokioAsyncReadCompatExt;
+let data: Vec<u8> = vec![0u8; 10000];
 
-let file = File::open("data.bin").await?;
-let stream = chunkrs::chunk_async(file.compat(), ChunkConfig::default());
+// All at once
+let mut chunker1 = Chunker::new(ChunkConfig::default());
+let (chunks1, _) = chunker1.push(Bytes::from(data.clone()));
+let final1 = chunker1.finish();
+
+// In 100-byte chunks
+let mut chunker2 = Chunker::new(ChunkConfig::default());
+let mut all_chunks2 = Vec::new();
+for chunk in data.chunks(100) {
+    let (chunks, _) = chunker2.push(Bytes::from(chunk));
+    all_chunks2.extend(chunks);
+}
+let final2 = chunker2.finish();
+
+// Same chunks, same hashes
+assert_eq!(chunks1.len() + final1.is_some() as usize, 
+           all_chunks2.len() + final2.is_some() as usize);
 ```
 
 ## Configuration
@@ -235,7 +251,6 @@ You can re-chunk a file on Tuesday with different I/O batch sizes and get bit-id
 | Feature | Description | Default |
 |---------|-------------|---------|
 | `hash-blake3` | BLAKE3 chunk hashing | ✅ |
-| `async-io` | Async `Stream` support via `futures-io` | ❌ |
 
 ```toml
 # Default: sync + hashing
@@ -245,10 +260,6 @@ chunkrs = "0.8"
 # Minimal: sync only, no hashing
 [dependencies]
 chunkrs = { version = "0.8", default-features = false }
-
-# Full featured: sync + async + hashing
-[dependencies]
-chunkrs = { version = "0.8", features = ["async-io"] }
 ```
 
 ## Roadmap

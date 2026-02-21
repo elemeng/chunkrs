@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.8.3] - 2026-02-21
+
+### Changed
+
+- **BREAKING**: Refactored API from iterator-based to streaming push()/finish() pattern
+  - Replaced `Chunker::chunk()` and `Chunker::chunk_bytes()` iterator methods with `push()` and `finish()`
+  - Removed `chunk_async()` async stream API
+  - Removed thread-local buffer pools for simpler, allocation-conscious design
+  - Removed `ChunkIter` and async stream modules
+  - BLAKE3 hashing now integrated directly into `Chunker` when `HashConfig.enabled` is true
+- Fixed pending bytes handling to maintain zero-copy semantics and CDC state correctness
+- Improved determinism: same stream produces identical chunks with identical hashes regardless of push batch size
+- Removed unused `ChunkError::ChunkTooLarge` variant
+- Simplified module structure: removed `buffer`, `async_stream` modules
+- Enhanced test coverage: 68 total tests (21 integration tests + 47 unit tests)
+  - Tests verify determinism, zero-copy semantics, hash correctness, and edge cases
+- Fixed all clippy warnings
+- Public API remains clean; internal modules (`cdc`, `hash`) are `pub(crate)` for internal use
+
+### Added
+
+- Streaming API with `push()` and `finish()` methods for true streaming chunking
+- Comprehensive integration tests in `tests/chunker_test.rs` for public API
+- Unit tests in `src/` modules for internal implementation details
+- 7 new tests covering edge cases and important behaviors
+
+### Fixed
+
+- CDC state corruption issue where pending bytes were being reprocessed
+- Incorrect chunk offset calculation
+- Hash computation now correctly computes from final chunk data
+- Module inception warning by renaming `chunker/chunker.rs` to `chunker/engine.rs`
+
 ## [0.8.2] - 2026-02-06
 
 ### Changed

@@ -59,12 +59,37 @@ impl std::error::Error for ChunkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::error::Error as _;
 
     #[test]
-    fn test_display() {
+    fn test_error_display() {
         let err = ChunkError::InvalidConfig {
-            message: "test error",
+            message: "test error message",
         };
-        assert!(err.to_string().contains("invalid config"));
+        let s = format!("{}", err);
+        
+        assert!(s.contains("invalid config"));
+        assert!(s.contains("test error message"));
+    }
+
+    #[test]
+    fn test_error_source() {
+        let err = ChunkError::InvalidConfig {
+            message: "test",
+        };
+        
+        // ChunkError doesn't have a source error
+        assert!(err.source().is_none());
+    }
+
+    #[test]
+    fn test_error_debug() {
+        let err = ChunkError::InvalidConfig {
+            message: "test message",
+        };
+        
+        let debug_str = format!("{:?}", err);
+        assert!(debug_str.contains("InvalidConfig"));
+        assert!(debug_str.contains("test message"));
     }
 }

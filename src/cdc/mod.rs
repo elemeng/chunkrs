@@ -1,10 +1,9 @@
-//! Content-Defined Chunking (CDC) implementations.
+//! Content-Defined Chunking (CDC) algorithms.
 //!
-//! This module contains the core algorithms for identifying chunk boundaries
-//! based on content patterns rather than fixed sizes.
-//!
-//! - [`FastCdc`] - FastCDC rolling hash implementation
+//! This module implements the FastCDC algorithm for detecting content-defined
+//! chunk boundaries.
 
 mod fastcdc;
 
-pub use fastcdc::FastCdc;
+// Re-export for use within the crate
+pub(crate) use fastcdc::FastCdc;

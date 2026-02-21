@@ -9,5 +9,6 @@
 #[cfg(feature = "hash-blake3")]
 mod blake3;
 
+// Re-export for use within the crate
 #[cfg(feature = "hash-blake3")]
-pub use blake3::Blake3Hasher;
+pub(crate) use blake3::Blake3Hasher;

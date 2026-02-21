@@ -79,14 +79,15 @@
 #![warn(missing_docs)]
 
 // Public modules
-mod chunk;
-mod chunker;
-mod config;
-mod error;
+pub mod chunk;
+pub mod chunker;
+pub mod config;
+pub mod error;
 
-// Internal modules (implementation details)
-mod cdc; // FastCDC rolling hash implementation
-mod hash; // BLAKE3 hasher wrapper
+// Internal modules (implementation details) - pub(crate) for use within crate
+pub(crate) mod cdc; // FastCDC rolling hash implementation
+#[cfg(feature = "hash-blake3")]
+pub(crate) mod hash; // BLAKE3 hasher wrapper
 
 //
 // Public API surface

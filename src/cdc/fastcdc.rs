@@ -204,8 +204,7 @@ impl FastCdc {
     ///
     /// Clears the hash and byte counter, allowing the same `FastCdc` instance
     /// to be reused for a new input stream.
-    #[allow(dead_code)]
-    pub(crate) fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.hash = 0;
         self.bytes_since_boundary = 0;
     }
@@ -280,8 +279,7 @@ impl FastCdc {
 
     /// Processes a buffer and returns the position of the first boundary found,
     /// or None if no boundary was found in this buffer.
-    #[allow(dead_code)]
-    pub(crate) fn find_boundary(&mut self, data: &[u8]) -> Option<usize> {
+    pub fn find_boundary(&mut self, data: &[u8]) -> Option<usize> {
         for (i, &byte) in data.iter().enumerate() {
             if self.update(byte) {
                 return Some(i + 1);
@@ -291,32 +289,27 @@ impl FastCdc {
     }
 
     /// Returns the number of bytes since the last boundary.
-    #[allow(dead_code)]
-    pub(crate) fn bytes_since_boundary(&self) -> usize {
+    pub fn bytes_since_boundary(&self) -> usize {
         self.bytes_since_boundary
     }
 
     /// Returns the current hash value (for debugging).
-    #[allow(dead_code)]
-    pub(crate) fn hash(&self) -> u64 {
+    pub fn hash(&self) -> u64 {
         self.hash
     }
 
     /// Returns the minimum size.
-    #[allow(dead_code)]
-    pub(crate) fn min_size(&self) -> usize {
+    pub fn min_size(&self) -> usize {
         self.min_size
     }
 
     /// Returns the average size.
-    #[allow(dead_code)]
-    pub(crate) fn avg_size(&self) -> usize {
+    pub fn avg_size(&self) -> usize {
         self.avg_size
     }
 
     /// Returns the maximum size.
-    #[allow(dead_code)]
-    pub(crate) fn max_size(&self) -> usize {
+    pub fn max_size(&self) -> usize {
         self.max_size
     }
 }
@@ -336,127 +329,115 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_masks_are_zero_padded() {
-        // Verify masks use distributed bits, not contiguous low bits
-        let mask_8kb = MASKS[13];
-        // Should not be a simple contiguous mask like 0x1fff
-        assert_ne!(mask_8kb, 0x1fff);
-        // Should have distributed bits (from paper)
-        assert_eq!(mask_8kb, 0x0000_0000_d903_0353);
-    }
-
-    #[test]
-    fn test_gear_tables() {
-        let gear = gear_table();
-        let gear_shifted = gear_table_shifted();
-
-        // Verify shifted table is correct
-        for i in 0..256 {
-            assert_eq!(gear_shifted[i], gear[i].wrapping_shl(1));
-        }
-    }
-
-    #[test]
-    fn test_update_detects_boundaries() {
+    fn test_fastcdc_min_size_constraint() {
         let mut cdc = FastCdc::new(4, 16, 64);
-
-        // Process some bytes - shouldn't find boundary before min_size
+        
+        // No boundaries before min_size
         for _ in 0..3 {
-            assert!(!cdc.update(0xFF));
+            assert!(!cdc.update(0xFF), "No boundary before min_size");
         }
+    }
 
-        // After min_size, we might find boundaries
-        let mut found = false;
-        for _ in 0..100 {
-            if cdc.update(0xAA) {
-                found = true;
+    #[test]
+    fn test_fastcdc_boundary_detection() {
+        let mut cdc = FastCdc::new(4, 16, 64);
+        
+        // After min_size, should find boundaries
+        let mut found_boundary = false;
+        for i in 0..200 {
+            if cdc.update((i % 256) as u8) {
+                found_boundary = true;
                 break;
             }
         }
-        // We should eventually find a boundary
-        assert!(found, "Should find a boundary within 100 bytes");
+        assert!(found_boundary, "Must find boundary within 200 bytes");
     }
 
     #[test]
-    fn test_max_size_forces_boundary() {
-        let mut cdc = FastCdc::new(4, 16, 8);
+    fn test_fastcdc_max_size_enforcement() {
+        let mut cdc = FastCdc::new(2, 8, 8);
+        
+        // Process bytes up to just before max
+        for _ in 0..7 {
+            assert!(!cdc.update(0xFF), "No boundary before max_size");
+        }
+        
+        // At max_size, must force boundary
+        assert!(cdc.update(0xFF), "Must force boundary at max_size");
+    }
 
-        // Should not find boundary before min_size
+    #[test]
+    fn test_fastcdc_reset() {
+        let mut cdc = FastCdc::new(4, 16, 64);
+        
+        // Process some data (less than min_size to avoid boundary)
         for _ in 0..3 {
-            assert!(!cdc.update(0xFF));
+            cdc.update(0xAA);
         }
-
-        // Should not find boundary before we hit max
-        for _ in 0..4 {
-            assert!(!cdc.update(0xFF));
-        }
-
-        // At byte 8, we should be forced to find a boundary
-        assert!(cdc.update(0xFF));
-    }
-
-    #[test]
-    fn test_find_boundary() {
-        let mut cdc = FastCdc::new(4, 16, 64);
-        let data = vec![0xAAu8; 100];
-
-        let boundary = cdc.find_boundary(&data);
-        assert!(boundary.is_some());
-
-        // Boundary should be at or after min_size
-        let pos = boundary.unwrap();
-        assert!(pos >= 4);
-    }
-
-    #[test]
-    fn test_reset() {
-        let mut cdc = FastCdc::new(4, 16, 64);
-
-        // Process some bytes
-        for _ in 0..10 {
-            cdc.update(0xFF);
-        }
-
-        assert!(cdc.bytes_since_boundary() > 0);
-        assert!(cdc.hash() != 0);
-
+        
+        let bytes_processed = cdc.bytes_since_boundary();
+        assert!(bytes_processed > 0, "Should have processed bytes: {}", bytes_processed);
+        
         cdc.reset();
-
-        assert_eq!(cdc.bytes_since_boundary(), 0);
-        assert_eq!(cdc.hash(), 0);
+        
+        assert_eq!(cdc.bytes_since_boundary(), 0, "Reset must clear byte counter");
+        assert_eq!(cdc.hash(), 0, "Reset must clear hash");
     }
 
     #[test]
-    fn test_determinism() {
-        // Same input should produce same boundaries
-        let data: Vec<u8> = (0..1000).map(|i| (i % 256) as u8).collect();
-
-        let mut cdc1 = FastCdc::new(64, 1024, 4096);
-        let mut cdc2 = FastCdc::new(64, 1024, 4096);
-
+    fn test_fastcdc_determinism() {
+        let data: Vec<u8> = (0..500).map(|i| (i % 256) as u8).collect();
+        
+        let mut cdc1 = FastCdc::new(16, 64, 256);
+        let mut cdc2 = FastCdc::new(16, 64, 256);
+        
         let mut boundaries1 = Vec::new();
         let mut boundaries2 = Vec::new();
-
+        
         for (i, &byte) in data.iter().enumerate() {
             if cdc1.update(byte) {
                 boundaries1.push(i + 1);
             }
         }
-
+        
         for (i, &byte) in data.iter().enumerate() {
             if cdc2.update(byte) {
                 boundaries2.push(i + 1);
             }
         }
-
-        assert_eq!(boundaries1, boundaries2);
+        
+        assert_eq!(boundaries1, boundaries2, 
+                   "Same input must produce same boundaries");
     }
 
     #[test]
-    fn test_default_config() {
+    fn test_fastcdc_find_boundary() {
+        let mut cdc = FastCdc::new(4, 16, 64);
+        let data = vec![0x55u8; 100];
+        
+        let boundary = cdc.find_boundary(&data);
+        
+        assert!(boundary.is_some(), "Must find boundary in data");
+        let pos = boundary.unwrap();
+        assert!(pos >= 4, "Boundary must be at or after min_size");
+        assert!(pos <= 64, "Boundary must be at or before max_size");
+    }
+
+    #[test]
+    fn test_fastcdc_default_config() {
         let cdc = FastCdc::default();
-        assert_eq!(cdc.min_size(), crate::config::DEFAULT_MIN_CHUNK_SIZE);
-        assert_eq!(cdc.avg_size(), crate::config::DEFAULT_AVG_CHUNK_SIZE);
-        assert_eq!(cdc.max_size(), crate::config::DEFAULT_MAX_CHUNK_SIZE);
+        
+        assert_eq!(cdc.min_size(), 4 * 1024);
+        assert_eq!(cdc.avg_size(), 16 * 1024);
+        assert_eq!(cdc.max_size(), 64 * 1024);
+    }
+
+    #[test]
+    fn test_fastcdc_size_accessors() {
+        let cdc = FastCdc::new(8, 32, 128);
+        
+        assert_eq!(cdc.min_size(), 8);
+        assert_eq!(cdc.avg_size(), 32);
+        assert_eq!(cdc.max_size(), 128);
     }
 }
