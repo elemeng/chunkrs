@@ -89,6 +89,7 @@ impl Blake3Hasher {
     /// hasher.update(b"hello ");
     /// hasher.update(b"world");
     /// ```
+    #[allow(dead_code)]
     pub fn update(&mut self, data: &[u8]) {
         self.state.update(data);
     }
@@ -111,6 +112,7 @@ impl Blake3Hasher {
     /// hasher.update(b"hello world");
     /// let hash = hasher.finalize();
     /// ```
+    #[allow(dead_code)]
     pub fn finalize(&self) -> ChunkHash {
         ChunkHash::new(self.state.finalize().into())
     }

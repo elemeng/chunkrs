@@ -1,76 +1,83 @@
-//! Async chunking with Tokio example.
+//! Async chunking with parallel processing example.
+//!
+//! Demonstrates using Chunker in async contexts for parallel processing.
+//! Multiple chunkers can run concurrently for different streams.
 //!
 //! Run with:
-//!     cargo run --example async_tokio --features async-io
+//!     cargo run --example async_tokio
 
-use std::env;
-
-use futures_util::StreamExt;
-
-use chunkrs::Chunk;
-use chunkrs::{ChunkConfig, Chunker, chunk_async};
+use bytes::Bytes;
+use chunkrs::{ChunkConfig, Chunker};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let path = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "Cargo.toml".to_string());
+    // Create multiple data streams
+    let streams: Vec<Vec<u8>> = vec![
+        (0..50_000).map(|i| (i % 256) as u8).collect(),
+        (50_000..100_000).map(|i| (i % 256) as u8).collect(),
+        (100_000..150_000).map(|i| (i % 256) as u8).collect(),
+    ];
 
-    println!("Async chunking file: {}\n", path);
-
-    // Method 1: Using chunk_async with in-memory data
-    let data = tokio::fs::read(&path).await?;
-    println!("File size: {} bytes\n", data.len());
-
-    // Use a reference to the data slice which implements futures_io::AsyncRead
-    let reader: &[u8] = &data[..];
+    println!("Processing {} streams concurrently...\n", streams.len());
 
     let config = ChunkConfig::default();
-    let mut stream = chunk_async(reader, config);
 
-    let mut total_chunks = 0;
-    let mut total_bytes = 0;
+    // Process each stream in parallel
+    let handles: Vec<_> = streams
+        .into_iter()
+        .enumerate()
+        .map(|(stream_id, data)| {
+            let config = config;
+            tokio::task::spawn_blocking(move || process_stream(stream_id, data, config))
+        })
+        .collect();
 
-    while let Some(chunk) = stream.next().await {
-        let chunk: Chunk = chunk?;
-        total_chunks += 1;
-        total_bytes += chunk.len();
-
-        if let Some(hash) = chunk.hash {
-            let hex = hash.to_hex();
-            println!(
-                "Chunk {}: offset={:>10}, len={:>8}, hash={}",
-                total_chunks,
-                chunk.offset.unwrap_or(0),
-                chunk.len(),
-                &hex[..16.min(hex.len())]
-            );
-        } else {
-            println!(
-                "Chunk {}: offset={:>10}, len={:>8}",
-                total_chunks,
-                chunk.offset.unwrap_or(0),
-                chunk.len()
-            );
-        }
+    // Wait for all streams to complete
+    for handle in handles {
+        let (stream_id, chunk_count, total_bytes) = handle.await??;
+        println!(
+            "Stream {}: {} chunks, {} bytes",
+            stream_id, chunk_count, total_bytes
+        );
     }
-
-    println!("\nTotal: {} chunks, {} bytes", total_chunks, total_bytes);
-    if total_chunks > 0 {
-        println!("Average chunk size: {} bytes", total_bytes / total_chunks);
-    }
-
-    // Method 2: Using sync Chunker with tokio::task::spawn_blocking
-    println!("\n--- Using spawn_blocking ---\n");
-
-    let data_clone: Vec<u8> = data.clone();
-    let chunks = tokio::task::spawn_blocking(move || {
-        let chunker = Chunker::new(ChunkConfig::default());
-        chunker.chunk_bytes(data_clone)
-    })
-    .await?;
-
-    println!("Spawn blocking result: {} chunks", chunks.len());
 
     Ok(())
+}
+
+fn process_stream(
+    stream_id: usize,
+    data: Vec<u8>,
+    config: ChunkConfig,
+) -> Result<(usize, usize, usize), Box<dyn std::error::Error>> {
+    let mut chunker = Chunker::new(config);
+    let mut chunk_count = 0;
+    let mut total_bytes = 0;
+    let mut pending = Bytes::new();
+
+    // Process in batches
+    let batch_size = 8192;
+    let mut offset = 0;
+
+    while offset < data.len() {
+        let end = (offset + batch_size).min(data.len());
+        let batch = Bytes::from(data[offset..end].to_vec());
+
+        let (chunks, leftover) = chunker.push(batch);
+
+        for chunk in chunks {
+            chunk_count += 1;
+            total_bytes += chunk.len();
+        }
+
+        pending = leftover;
+        offset = end;
+    }
+
+    // Finalize
+    if let Some(final_chunk) = chunker.finish() {
+        chunk_count += 1;
+        total_bytes += final_chunk.len();
+    }
+
+    Ok((stream_id, chunk_count, total_bytes))
 }

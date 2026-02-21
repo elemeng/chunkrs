@@ -1,13 +1,13 @@
-//! Chunker implementation for processing byte streams.
+//! Chunking engine for processing byte streams.
 //!
-//! This module provides the synchronous chunking API:
+//! This module provides the streaming chunking API:
 //!
-//! - [`Chunker`] - High-level API for chunking byte streams
-//! - [`ChunkIter`] - Iterator that yields chunks from a reader
+//! - [`Chunker`] - Stateful CDC engine with `push()`/`finish()` API
 //!
 //! The chunker uses the FastCDC algorithm to identify content-defined
-//! boundaries in a streaming fashion.
+//! boundaries in a streaming fashion, ensuring deterministic results
+//! regardless of input batch sizes.
 
-mod iter;
+mod engine;
 
-pub use iter::{ChunkIter, Chunker};
+pub use engine::Chunker;

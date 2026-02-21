@@ -3,6 +3,7 @@
 //! Run with:
 //!     cargo bench
 
+use bytes::Bytes;
 use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
 
 use chunkrs::{ChunkConfig, Chunker};
@@ -21,8 +22,9 @@ fn bench_chunker(c: &mut Criterion) {
             &data,
             |b, data| {
                 b.iter(|| {
-                    let chunker = Chunker::new(ChunkConfig::default());
-                    let chunks = chunker.chunk_bytes(black_box(data.clone()));
+                    let mut chunker = Chunker::new(ChunkConfig::default());
+                    let (chunks, _) = chunker.push(Bytes::from(black_box(data.clone())));
+                    let _final = chunker.finish();
                     black_box(chunks.len())
                 });
             },
@@ -35,8 +37,9 @@ fn bench_chunker(c: &mut Criterion) {
             &zeros,
             |b, data| {
                 b.iter(|| {
-                    let chunker = Chunker::new(ChunkConfig::default());
-                    let chunks = chunker.chunk_bytes(black_box(data.clone()));
+                    let mut chunker = Chunker::new(ChunkConfig::default());
+                    let (chunks, _) = chunker.push(Bytes::from(black_box(data.clone())));
+                    let _final = chunker.finish();
                     black_box(chunks.len())
                 });
             },
@@ -55,8 +58,9 @@ fn bench_configs(c: &mut Criterion) {
     group.bench_function("small_chunks", |b| {
         let config = ChunkConfig::new(2 * 1024, 8 * 1024, 32 * 1024).unwrap();
         b.iter(|| {
-            let chunker = Chunker::new(config);
-            let chunks = chunker.chunk_bytes(black_box(data.clone()));
+            let mut chunker = Chunker::new(config);
+            let (chunks, _) = chunker.push(Bytes::from(black_box(data.clone())));
+            let _final = chunker.finish();
             black_box(chunks.len())
         });
     });
@@ -65,8 +69,9 @@ fn bench_configs(c: &mut Criterion) {
     group.bench_function("default_chunks", |b| {
         let config = ChunkConfig::default();
         b.iter(|| {
-            let chunker = Chunker::new(config);
-            let chunks = chunker.chunk_bytes(black_box(data.clone()));
+            let mut chunker = Chunker::new(config);
+            let (chunks, _) = chunker.push(Bytes::from(black_box(data.clone())));
+            let _final = chunker.finish();
             black_box(chunks.len())
         });
     });
@@ -75,8 +80,9 @@ fn bench_configs(c: &mut Criterion) {
     group.bench_function("large_chunks", |b| {
         let config = ChunkConfig::new(64 * 1024, 256 * 1024, 1024 * 1024).unwrap();
         b.iter(|| {
-            let chunker = Chunker::new(config);
-            let chunks = chunker.chunk_bytes(black_box(data.clone()));
+            let mut chunker = Chunker::new(config);
+            let (chunks, _) = chunker.push(Bytes::from(black_box(data.clone())));
+            let _final = chunker.finish();
             black_box(chunks.len())
         });
     });
@@ -85,8 +91,9 @@ fn bench_configs(c: &mut Criterion) {
     group.bench_function("no_hash", |b| {
         let config = ChunkConfig::default().with_hash_config(chunkrs::HashConfig::disabled());
         b.iter(|| {
-            let chunker = Chunker::new(config);
-            let chunks = chunker.chunk_bytes(black_box(data.clone()));
+            let mut chunker = Chunker::new(config);
+            let (chunks, _) = chunker.push(Bytes::from(black_box(data.clone())));
+            let _final = chunker.finish();
             black_box(chunks.len())
         });
     });
@@ -95,39 +102,36 @@ fn bench_configs(c: &mut Criterion) {
 }
 
 fn bench_streaming(c: &mut Criterion) {
-    use std::io::Read;
-
     let mut group = c.benchmark_group("streaming");
     let size = 1024 * 1024; // 1 MB
     let data: Vec<u8> = (0..size).map(|i| (i * 7 + 13) as u8).collect();
 
     group.throughput(Throughput::Bytes(size as u64));
-    group.bench_function("iterator", |b| {
+    group.bench_function("push_finish", |b| {
         b.iter(|| {
-            let cursor = std::io::Cursor::new(black_box(&data));
-            let chunker = Chunker::new(ChunkConfig::default());
-            let mut count = 0;
-            for chunk in chunker.chunk(cursor) {
-                let _ = chunk.unwrap();
-                count += 1;
+            let mut chunker = Chunker::new(ChunkConfig::default());
+            let mut total = 0;
+            let batch_size = 8192;
+
+            for chunk in black_box(&data).chunks(batch_size) {
+                let (chunks, _) = chunker.push(Bytes::from(chunk.to_vec()));
+                total += chunks.len();
             }
-            black_box(count)
+
+            if chunker.finish().is_some() {
+                total += 1;
+            }
+
+            black_box(total)
         });
     });
 
-    group.bench_function("buffered", |b| {
+    group.bench_function("single_push", |b| {
         b.iter(|| {
-            let mut cursor = std::io::Cursor::new(black_box(&data));
-            let mut buf = vec![0u8; 64 * 1024];
-            let mut total = 0usize;
-            loop {
-                let n = cursor.read(&mut buf).unwrap();
-                if n == 0 {
-                    break;
-                }
-                total += n;
-            }
-            black_box(total)
+            let mut chunker = Chunker::new(ChunkConfig::default());
+            let (chunks, _) = chunker.push(Bytes::from(black_box(data.clone())));
+            let _final = chunker.finish();
+            black_box(chunks.len())
         });
     });
 

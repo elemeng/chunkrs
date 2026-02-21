@@ -182,7 +182,7 @@ let no_hash = ChunkConfig::default().with_hash_config(HashConfig::disabled());
 
 **Throughput targets on modern hardware:**
 
-| Storage | Single-core CDC | Bottleneck |
+| Storage | Single-core CDC| Bottleneck |
 |---------|----------------|------------|
 | NVMe Gen4 | ~3–5 GB/s | CPU (hashing) |
 | NVMe Gen5 | ~3–5 GB/s | CDC algorithm |
