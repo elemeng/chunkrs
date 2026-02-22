@@ -380,32 +380,29 @@ impl FastCdc {
 
         // Check if we've exceeded maximum size - force boundary
         if self.bytes_since_boundary >= self.max_size {
-            self.bytes_since_boundary = 0;
-            self.hash = 0;
-            return true;
+            return self.emit_boundary();
         }
 
-        // Determine the mask to use
-        // Start with mask_s (harder to match), switch to mask_l at avg_size
-        // This optimization avoids checking the condition on every byte
-        let mask = if self.bytes_since_boundary == self.avg_size {
-            self.mask_l
-        } else if self.bytes_since_boundary < self.avg_size {
+        // Select mask: mask_s before avg_size, mask_l at/after avg_size
+        let mask = if self.bytes_since_boundary < self.avg_size {
             self.mask_s
         } else {
             self.mask_l
         };
 
-        // Optimized boundary check
-        // Check: (hash & mask) == 0
-        // Zero-padded masks from the paper provide better deduplication ratio
+        // Check boundary condition
         if (self.hash & mask) == 0 {
-            self.bytes_since_boundary = 0;
-            self.hash = 0;
-            true
+            self.emit_boundary()
         } else {
             false
         }
+    }
+
+    /// Emits a boundary by resetting state and returning true.
+    fn emit_boundary(&mut self) -> bool {
+        self.bytes_since_boundary = 0;
+        self.hash = 0;
+        true
     }
 
     /// Processes a buffer and returns the position of the first boundary found,
