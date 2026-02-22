@@ -101,6 +101,14 @@ pub struct ChunkConfig {
 
     /// Configuration for hashing behavior.
     hash_config: HashConfig,
+
+    /// Optional key for keyed gear table (security feature).
+    ///
+    /// When set, the gear table is hashed with this key using BLAKE3,
+    /// preventing adversarial chunk boundary manipulation attacks.
+    /// This requires the `keyed-cdc` feature flag.
+    #[cfg(feature = "keyed-cdc")]
+    key: Option<[u8; 32]>,
 }
 
 impl ChunkConfig {
@@ -166,6 +174,8 @@ impl ChunkConfig {
             max_size,
             normalization_level: effective_level,
             hash_config: HashConfig::default(),
+            #[cfg(feature = "keyed-cdc")]
+            key: None,
         })
     }
 
@@ -259,6 +269,32 @@ impl ChunkConfig {
         self
     }
 
+    /// Sets the key for keyed gear table generation.
+    ///
+    /// When a key is set, the gear table is hashed with this key using BLAKE3,
+    /// preventing adversarial chunk boundary manipulation attacks. This is useful
+    /// for public-facing deduplication services.
+    ///
+    /// This requires the `keyed-cdc` feature flag.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - A 32-byte key, or None to disable keyed mode
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use chunkrs::ChunkConfig;
+    ///
+    /// let key = [0u8; 32];
+    /// let config = ChunkConfig::default().with_keyed_gear_table(Some(key));
+    /// ```
+    #[cfg(feature = "keyed-cdc")]
+    pub fn with_keyed_gear_table(mut self, key: Option<[u8; 32]>) -> Self {
+        self.key = key;
+        self
+    }
+
     /// Returns the minimum chunk size.
     pub fn min_size(&self) -> usize {
         self.min_size
@@ -282,6 +318,14 @@ impl ChunkConfig {
     /// Returns the hash configuration.
     pub fn hash_config(&self) -> &HashConfig {
         &self.hash_config
+    }
+
+    /// Returns the key for keyed gear table, if set.
+    ///
+    /// This requires the `keyed-cdc` feature flag.
+    #[cfg(feature = "keyed-cdc")]
+    pub fn keyed_gear_table_key(&self) -> Option<[u8; 32]> {
+        self.key
     }
 
     /// Validates the current configuration.
@@ -309,6 +353,8 @@ impl Default for ChunkConfig {
             max_size: DEFAULT_MAX_CHUNK_SIZE,
             normalization_level: DEFAULT_NORMALIZATION_LEVEL,
             hash_config: HashConfig::default(),
+            #[cfg(feature = "keyed-cdc")]
+            key: None,
         }
     }
 }

@@ -105,6 +105,65 @@ fn gear_table_shifted() -> &'static [u64; 256] {
     &SHIFTED
 }
 
+/// Generates a keyed gear table using BLAKE3.
+///
+/// This function hashes the standard gear table with a secret key, preventing
+/// adversarial chunk boundary manipulation attacks. This is useful for
+/// public-facing deduplication services where malicious users might craft
+/// data to create worst-case chunk sizes.
+///
+/// This requires the `keyed-cdc` feature flag.
+///
+/// # Arguments
+///
+/// * `key` - A 32-byte BLAKE3 key
+///
+/// # Returns
+///
+/// A 256-element array of u64 gear values
+#[cfg(feature = "keyed-cdc")]
+fn generate_keyed_gear_table(key: [u8; 32]) -> [u64; 256] {
+    use blake3::Hasher;
+
+    let base = gear_table();
+    let mut keyed = [0u64; 256];
+
+    for i in 0..256 {
+        let mut hasher = Hasher::new_keyed(&key);
+        hasher.update(&base[i].to_le_bytes());
+        let hash = hasher.finalize();
+        keyed[i] = u64::from_le_bytes(hash.as_bytes()[0..8].try_into().unwrap());
+    }
+
+    keyed
+}
+
+/// Generates a pre-shifted keyed gear table.
+///
+/// This is the keyed version of `gear_table_shifted()`, with each value
+/// pre-shifted by 1 bit for optimized hashing.
+///
+/// This requires the `keyed-cdc` feature flag.
+///
+/// # Arguments
+///
+/// * `key` - A 32-byte BLAKE3 key
+///
+/// # Returns
+///
+/// A 256-element array of pre-shifted u64 gear values
+#[cfg(feature = "keyed-cdc")]
+fn generate_keyed_gear_table_shifted(key: [u8; 32]) -> [u64; 256] {
+    let keyed = generate_keyed_gear_table(key);
+    let mut shifted = [0u64; 256];
+
+    for i in 0..256 {
+        shifted[i] = keyed[i].wrapping_shl(1);
+    }
+
+    shifted
+}
+
 /// Pre-computed zero-padded masks for FastCDC.
 ///
 /// These masks are derived from the FastCDC paper (Algorithm 1) and use zero-padding
@@ -292,6 +351,9 @@ pub struct FastCdc {
     /// This mask has fewer bits set, making it easier for (hash & mask) == 0 to match.
     /// This reduces the number of large chunks.
     mask_l: u64,
+
+    /// Pre-shifted gear table for hashing (may be keyed or standard).
+    gear_table_shifted: [u64; 256],
 }
 
 impl FastCdc {
@@ -311,6 +373,38 @@ impl FastCdc {
     /// - Level 1 (default): Masks differ by ±1 bit - balanced distribution
     /// - Level N: Masks differ by ±N bits - tighter distribution, more predictable sizes
     pub fn new(min_size: usize, avg_size: usize, max_size: usize, normalization_level: u8) -> Self {
+        Self::with_key(min_size, avg_size, max_size, normalization_level, None)
+    }
+
+    /// Creates a new FastCDC state with an optional key for keyed gear table.
+    ///
+    /// # Arguments
+    ///
+    /// * `min_size` - Minimum chunk size (no boundaries before this)
+    /// * `avg_size` - Average/target chunk size
+    /// * `max_size` - Maximum chunk size (forces boundary if reached)
+    /// * `normalization_level` - Mask aggressiveness (0 = none, 1 = ±1 bit, 2 = ±2 bits, etc.)
+    /// * `key` - Optional 32-byte key for keyed gear table (requires `keyed-cdc` feature)
+    ///
+    /// This method allows creating a FastCDC instance with a keyed gear table,
+    /// which prevents adversarial chunk boundary manipulation attacks.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// #[cfg(feature = "keyed-cdc")]
+    /// use chunkrs::cdc::FastCdc;
+    ///
+    /// let key = [0u8; 32];
+    /// let mut cdc = FastCdc::with_key(4096, 16384, 65536, 1, Some(key));
+    /// ```
+    pub fn with_key(
+        min_size: usize,
+        avg_size: usize,
+        max_size: usize,
+        normalization_level: u8,
+        key: Option<[u8; 32]>,
+    ) -> Self {
         // Get the bit position for avg_size
         let avg_bits = avg_size.trailing_zeros() as usize;
         let level = normalization_level as usize;
@@ -330,6 +424,17 @@ impl FastCdc {
             MASKS[avg_bits - level] // Easier to match (fewer bits set)
         };
 
+        // Generate gear table based on whether a key is provided
+        #[cfg(feature = "keyed-cdc")]
+        let gear_table_shifted = if let Some(k) = key {
+            generate_keyed_gear_table_shifted(k)
+        } else {
+            *gear_table_shifted()
+        };
+
+        #[cfg(not(feature = "keyed-cdc"))]
+        let gear_table_shifted = *gear_table_shifted();
+
         Self {
             hash: 0,
             min_size,
@@ -338,6 +443,7 @@ impl FastCdc {
             bytes_since_boundary: 0,
             mask_s,
             mask_l,
+            gear_table_shifted,
         }
     }
 
@@ -382,7 +488,7 @@ impl FastCdc {
         // Optimized Gear hash using pre-shifted table
         // Equivalent to: self.hash = (self.hash << 1) + gear_table()[byte]
         let byte_idx = byte as usize;
-        let gear = gear_table_shifted()[byte_idx];
+        let gear = self.gear_table_shifted[byte_idx];
         self.hash = self.hash.wrapping_add(gear);
 
         // Check if we've reached minimum size
@@ -628,5 +734,83 @@ mod tests {
             }
         }
         assert!(found_boundary, "Level 2 must find boundaries");
+    }
+
+    #[cfg(feature = "keyed-cdc")]
+    #[test]
+    fn test_fastcdc_keyed_gear_table() {
+        let key = [42u8; 32];
+        let mut cdc = FastCdc::with_key(4, 16, 64, 1, Some(key));
+
+        // Keyed gear table should still find boundaries
+        let mut found_boundary = false;
+        for i in 0..200 {
+            if cdc.update((i % 256) as u8) {
+                found_boundary = true;
+                break;
+            }
+        }
+        assert!(found_boundary, "Keyed gear table must find boundaries");
+    }
+
+    #[cfg(feature = "keyed-cdc")]
+    #[test]
+    fn test_fastcdc_keyed_determinism() {
+        let key = [123u8; 32];
+        let data: Vec<u8> = (0..500).map(|i| (i % 256) as u8).collect();
+
+        let mut cdc1 = FastCdc::with_key(16, 64, 256, 1, Some(key));
+        let mut cdc2 = FastCdc::with_key(16, 64, 256, 1, Some(key));
+
+        let mut boundaries1 = Vec::new();
+        let mut boundaries2 = Vec::new();
+
+        for (i, &byte) in data.iter().enumerate() {
+            if cdc1.update(byte) {
+                boundaries1.push(i + 1);
+            }
+        }
+
+        for (i, &byte) in data.iter().enumerate() {
+            if cdc2.update(byte) {
+                boundaries2.push(i + 1);
+            }
+        }
+
+        assert_eq!(
+            boundaries1, boundaries2,
+            "Same key must produce same boundaries"
+        );
+    }
+
+    #[cfg(feature = "keyed-cdc")]
+    #[test]
+    fn test_fastcdc_different_keys_different_boundaries() {
+        let key1 = [1u8; 32];
+        let key2 = [2u8; 32];
+        let data: Vec<u8> = (0..500).map(|i| (i % 256) as u8).collect();
+
+        let mut cdc1 = FastCdc::with_key(16, 64, 256, 1, Some(key1));
+        let mut cdc2 = FastCdc::with_key(16, 64, 256, 1, Some(key2));
+
+        let mut boundaries1 = Vec::new();
+        let mut boundaries2 = Vec::new();
+
+        for (i, &byte) in data.iter().enumerate() {
+            if cdc1.update(byte) {
+                boundaries1.push(i + 1);
+            }
+        }
+
+        for (i, &byte) in data.iter().enumerate() {
+            if cdc2.update(byte) {
+                boundaries2.push(i + 1);
+            }
+        }
+
+        assert_ne!(
+            boundaries1, boundaries2,
+            "Different keys should produce different boundaries"
+        );
     }
 }

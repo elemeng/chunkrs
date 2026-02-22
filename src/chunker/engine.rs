@@ -120,12 +120,18 @@ impl Chunker {
     /// let chunker = Chunker::new(ChunkConfig::default());
     /// ```
     pub fn new(config: ChunkConfig) -> Self {
+        #[cfg(feature = "keyed-cdc")]
+        let key = config.keyed_gear_table_key();
+        #[cfg(not(feature = "keyed-cdc"))]
+        let key = None;
+
         Self {
-            cdc: FastCdc::new(
+            cdc: FastCdc::with_key(
                 config.min_size(),
                 config.avg_size(),
                 config.max_size(),
                 config.normalization_level(),
+                key,
             ),
             pending: None,
             offset: 0,

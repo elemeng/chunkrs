@@ -35,6 +35,9 @@ default = ["hash-blake3"]
 hash = []
 hash-blake3 = ["hash", "dep:blake3"]
 
+# Security features
+keyed-cdc = ["hash-blake3"]
+
 [dev-dependencies]
 tokio = { version = "1.35", features = [
     "rt-multi-thread",
