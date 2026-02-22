@@ -10,4 +10,6 @@
 
 mod engine;
 
+// Re-export for use within the crate
+// Since chunker module is private, pub is crate-local
 pub use engine::Chunker;

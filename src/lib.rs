@@ -145,15 +145,13 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-// Public modules
-pub mod chunk;
-pub mod chunker;
-pub mod config;
-pub mod error;
-
 // Internal modules (implementation details)
 // These are not exposed in the public API
 mod cdc; // FastCDC rolling hash implementation
+mod chunk;
+mod chunker;
+mod config;
+mod error;
 #[cfg(feature = "hash-blake3")]
 mod hash; // BLAKE3 hasher wrapper
 mod util; // Internal utility functions
@@ -163,6 +161,7 @@ mod util; // Internal utility functions
 //
 // The public API is intentionally minimal. Only essential types are exported
 // to keep the surface area small and the API stable.
+// Using flat API design: users access all types directly from crate root
 //
 
 /// Chunk type returned by the chunker.
