@@ -201,22 +201,21 @@ mod tests {
 
     #[test]
     fn test_fastcdc_determinism() {
-        let data = vec
-![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let data = vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10];
         let mut cdc1 = FastCdc::new(4, 8, 16, 2);
         let mut cdc2 = FastCdc::new(4, 8, 16, 2);
         let mut boundaries1 = Vec::new();
         let mut boundaries2 = Vec::new();
 
-        for byte in &data {
+        for (i, byte) in data.iter().enumerate() {
             if cdc1.update(*byte) {
-                boundaries1.push(cdc1.bytes_since_boundary);
+                boundaries1.push(i + 1);
             }
         }
 
-        for byte in &data {
+        for (i, byte) in data.iter().enumerate() {
             if cdc2.update(*byte) {
-                boundaries2.push(cdc2.bytes_since_boundary);
+                boundaries2.push(i + 1);
             }
         }
 

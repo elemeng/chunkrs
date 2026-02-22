@@ -21,17 +21,6 @@ Zero-copy streaming. Async-agnostic. Excellent for any chunking and hashing use 
 - **Minimal API**: Only 6 public types accessible from crate root - `Chunker`, `Chunk`, `ChunkHash`, `ChunkConfig`, `HashConfig`, `ChunkError`
 - **Well-tested**: Comprehensive unit tests, integration tests, and fuzzing
 
-## Recent Improvements
-
-- **Flat API design**: Implemented clean, flat API with no duplicate paths (e.g., only `chunkrs::Chunk`, not `chunkrs::chunk::Chunk`)
-- **Clean module visibility**: Eliminated all `pub(crate)` usage using layered visibility architecture
-- **Optimized Bytes handling**: Eliminated unnecessary allocations in examples and tests
-- **Consolidated helpers**: Extracted duplicate code into reusable helper methods
-- **Simplified architecture**: Removed unused hasher state for better performance
-- **Fixed examples**: All examples now use random data for realistic testing
-- **Removed duplicates**: Consolidated duplicate code and fuzz targets
-- **Clean warnings**: All compiler warnings resolved
-
 ## Architecture
 
 chunkrs processes **one logical byte stream at a time** with byte-by-byte serial CDC:
@@ -39,10 +28,10 @@ chunkrs processes **one logical byte stream at a time** with byte-by-byte serial
 ```text
 ┌───────────────┐     ┌──────────────────┐      ┌──────────────────┐ 
 │ Input Bytes   │     │ Push-based       │      │ Serial CDC State │
-│ (any source)  │────▶│ Streaming API    │────▶ │ (FastCDC rolling │ 
+│ (any source)  │────▶│ Streaming API   │────▶ │ (FastCDC rolling │ 
 │               │     │ push()/finish()  │      │   hash, byte-by- │             
 └───────────────┘     └──────────────────┘      │   byte)          │ 
-                                                     └──────────────────┘ 
+                                                └──────────────────┘ 
     ┌─────────────┐       ┌───────────────────┐
     │             │       │ Chunk {           │
 ──▶ │ Chunk      │────▶  │   data: Bytes,    │
@@ -67,7 +56,7 @@ chunkrs processes **one logical byte stream at a time** with byte-by-byte serial
 
 ```toml
 [dependencies]
-chunkrs = "0.8"
+chunkrs = "0.9"
 ```
 
 ```rust
@@ -279,20 +268,16 @@ You can re-chunk a file on Tuesday with different batch sizes and get bit-identi
 ```toml
 # Default: sync + hashing
 [dependencies]
-chunkrs = "0.8"
+chunkrs = "0.9"
 
 # Minimal: sync only, no hashing
 [dependencies]
-chunkrs = { version = "0.8", default-features = false }
+chunkrs = { version = "0.9", default-features = false }
 ```
 
 ## Roadmap
 
-**Current:** 0.8.0 — Core API stable, comprehensive feature set, seeking production feedback.
-
-```text
-Note: bumped version to 0.8.0 because design, APIs, features are almost matured.
-```
+**Current:** 0.9.0 — Core API stable, comprehensive feature set, seeking production feedback.
 
 ### Implemented ✅
 

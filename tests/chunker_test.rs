@@ -163,7 +163,10 @@ fn test_multiple_finish_calls() {
     assert!(final2.is_none(), "Second finish() should return None");
 
     // At least one chunk should have been produced either in chunks or finish
-    assert!(has_chunks || final1.is_some(), "Should have produced at least one chunk");
+    assert!(
+        has_chunks || final1.is_some(),
+        "Should have produced at least one chunk"
+    );
 }
 
 // ============================================================================

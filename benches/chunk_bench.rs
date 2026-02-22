@@ -10,8 +10,8 @@
 //!     cargo bench --features keyed-cdc
 
 use bytes::Bytes;
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use chunkrs::{ChunkConfig, Chunker};
+use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
 
 fn bench_chunker(c: &mut Criterion) {
     let mut group = c.benchmark_group("chunker");
@@ -176,12 +176,7 @@ fn bench_streaming(c: &mut Criterion) {
 }
 
 // Conditionally include keyed-cdc benchmarks
-criterion_group!(
-    benches,
-    bench_chunker,
-    bench_configs,
-    bench_streaming
-);
+criterion_group!(benches, bench_chunker, bench_configs, bench_streaming);
 
 // Add keyed-cdc benchmarks only when feature is enabled
 #[cfg(feature = "keyed-cdc")]

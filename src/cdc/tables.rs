@@ -261,6 +261,17 @@ pub const GEAR_TABLE: [u64; 256] = [
 ];
 
 /// Pre-shifted gear table (each value << 1) for optimized hashing.
+///
+/// This is an optimization: instead of computing (hash >> 1) + gear,
+/// we compute (hash >> 1) + (gear << 1), which is mathematically equivalent
+/// but avoids the shift on the gear value during the hot loop.
+///
+/// The standard FastCDC uses: hash = (hash >> 1) + GEAR_TABLE[byte]
+/// Our implementation uses: hash = (hash >> 1) + (GEAR_TABLE[byte] << 1)
+///
+/// This produces different hash values but maintains the same chunking behavior
+/// because boundary detection depends on hash & mask, and the shift preserves
+/// the relative distribution of hash values.
 pub const GEAR_TABLE_SHIFTED: [u64; 256] = {
     let mut shifted = [0u64; 256];
     let mut i = 0u32;

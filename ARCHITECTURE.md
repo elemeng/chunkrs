@@ -4,7 +4,7 @@
 >
 > `chunkrs` is a *library crate*, not a workload scheduler. It focuses on **correct, fast, single-stream chunking** and leaves concurrency orchestration, storage policy, and sync semantics to the application layer.
 
-## Version: 0.8.3
+## Version: 0.9.0
 
 ---
 

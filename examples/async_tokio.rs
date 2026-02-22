@@ -8,7 +8,7 @@
 
 use bytes::Bytes;
 use chunkrs::{ChunkConfig, Chunker};
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

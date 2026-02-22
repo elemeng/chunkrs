@@ -5,7 +5,7 @@
 
 use bytes::Bytes;
 use chunkrs::{ChunkConfig, Chunker};
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create some sample data with varied content using random numbers
