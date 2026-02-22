@@ -4,6 +4,14 @@
 >
 > `chunkrs` is a *library crate*, not a workload scheduler. It focuses on **correct, fast, single-stream chunking** and leaves concurrency orchestration, storage policy, and sync semantics to the application layer.
 
+## Version: 0.8.3
+
+---
+
+## Overview
+
+```Byte Stream → CDC Boundary Detection → Chunk Assembly → Chunk Hashing → Output Stream```
+
 ---
 
 ## 1. Design Goals
@@ -17,18 +25,19 @@
    Sustain line-rate performance on NVMe, PCIe 5.0, 100 Gbps networks, and DDR5 memory *without intra-file parallelism*.
 
 3. **Deterministic-by-Content**
-   Given identical byte streams and configuration, the produced chunk *hashes* are deterministic.
-
-   > Exact chunk *boundaries* may vary slightly across execution strategies, but chunk identity is always defined by content hash.
+   Given identical byte streams and configuration, the produced chunk *boundaries* and *hashes* are deterministic.
 
 4. **Zero-Copy Friendly**
-   Integrate cleanly with `bytes`, `Read`, `AsyncRead`, and application-owned buffers.
+   Integrate cleanly with `bytes` for zero-copy chunk data slicing.
 
 5. **Allocator Discipline**
    Avoid allocator contention and allocation storms under high throughput or many small files.
 
 6. **Std-quality API Surface**
    Small, orthogonal traits. Predictable behavior. No hidden global state.
+
+7. **Memory Safety**
+   Zero unsafe code. `#![forbid(unsafe_code)]` enforced throughout.
 
 ---
 
@@ -43,23 +52,7 @@ These are explicitly **application responsibilities**.
 
 ---
 
-## 3. High-Level Model
-
-`chunkrs` processes **one logical byte stream at a time**:
-
-```text
-Byte Stream → CDC Boundary Detection → Chunk Assembly → Chunk Hashing → Output Stream
-```
-
-The engine is fully streaming:
-
-* Input may arrive in arbitrarily sized batches
-* CDC state is preserved across batch boundaries
-* Output chunks are emitted incrementally
-
----
-
-## 4. CDC Algorithm Choice
+## 3. CDC Algorithm Choice
 
 ### Boundary Detection
 
@@ -76,112 +69,121 @@ Rolling hash is used **only** to decide *where* chunks end — **never** as a co
 Each emitted chunk is finalized with a **strong cryptographic hash** (default: BLAKE3):
 
 * Chunk hash defines identity
-* Used for deduplication, delta sync, and verification
+* Used for deduplication, delta sync, verification, ect.
 * Rolling hash state does *not* affect identity
 
 ---
 
-## 5. Determinism Model
+## 4. Determinism Model
 
 ### What Is Guaranteed
 
+* Identical byte streams + identical configuration → identical **chunk boundaries**
 * Identical byte streams + identical configuration → identical **chunk hashes**
-* CDC behavior is stable within a single execution model
-* CDC state is strictly serial across the logical byte stream
+* CDC behavior is byte-by-byte serial, ensuring deterministic boundaries regardless of:
+  * Input batch sizes (1 byte vs 1MB vs streaming)
+  * Number of `push()` calls
+  * Call timing
 
-### What Is *Not* Guaranteed
+### Implementation
 
-* Bit-for-bit identical chunk *boundaries* across different execution strategies or batching patterns
+The FastCDC algorithm processes each byte sequentially, maintaining rolling hash state across all calls. This ensures:
 
-This tradeoff is intentional and aligned with real-world delta sync systems, where **content hash equality** — not boundary offset — defines equivalence.
+* Exact boundary determinism - same byte positions always produce same boundaries
+* No dependency on execution strategy or batching patterns
+* Perfect reproducibility across different streaming scenarios
 
 ---
 
-## 6. Streaming & Backpressure
+## 5. Streaming API
 
-The core API exposes chunking as a **bounded stream**:
+The core API exposes chunking as a **push-based streaming interface**:
 
-* Internally uses a bounded buffer (2–4 chunks)
-* Producers naturally block when consumers are slow
-* Prevents unbounded memory growth
+* `Chunker::push(Bytes)` - Feed data in arbitrary sizes (1 byte to megabytes)
+* `Chunker::finish()` - Emit final incomplete chunk when stream ends
+* Returns `(Vec<Chunk>, Bytes)` - Complete chunks and pending unprocessed bytes
+
+### Memory Considerations
+
+* The `push()` method returns a `Vec<Chunk>` - caller must process or drop chunks promptly
+* Accumulating returned chunks may OOM on large streams - caller's responsibility
+* Pending unprocessed bytes are held internally for CDC state continuity
 
 This design ensures:
 
-* Safe integration with slow sinks (disk, network, object storage)
-* No Rayon or async executor starvation
+* Zero-copy chunk data via `Bytes` slicing from input
+* Caller controls memory and backpressure
+* Flexible integration with any data source
 
 ---
 
-## 7. Memory Architecture
+## 6. Memory Architecture
 
-### Thread-Local Buffer Pools
+### Zero-Copy Design
 
-To eliminate allocator contention:
+The implementation uses `Bytes` from the `bytes` crate for zero-copy chunk data:
 
-* Each worker thread maintains a **thread-local buffer cache**
-* Buffers are reused across chunk operations
-* No global locks
+* Chunk data is sliced directly from input `Bytes` references
+* No data copying when creating chunks
+* Caller owns the underlying memory
+
+### Allocator Discipline
+
+To minimize allocations:
+
+* No global buffer pools
 * No cross-thread buffer migration
+* Pending bytes are held internally only between `push()` calls
 
-Properties:
-
-* Zero allocation on hot paths
-* NUMA-friendly
-* Predictable memory footprint
-
-> Thread-local caches are considered *local state*, not global state.
+The library provides tools for efficient chunking, but memory management (thread pools, buffer reuse, etc.) is the application's responsibility.
 
 ---
 
-## 8. Execution Model
+## 7. Execution Model
 
 ### Single-Stream Serial CDC
 
 CDC is inherently serial over a byte stream:
 
 * Rolling hash state at byte `n` depends on bytes `[0..n)`
-* Input may be split into batches, but state persists
+* Input may be split into batches via multiple `push()` calls, but state persists
+* Implementation processes bytes one-by-one for exact determinism
 
 Therefore:
 
 * `chunkrs` does **not** parallelize CDC within a file
 * Modern CPUs are sufficient to saturate I/O bandwidth without intra-file parallelism
 
-Parallelism is achieved by **overlapping I/O and computation**, not by fragmenting the stream.
+### Application-Level Parallelism
+
+Applications achieve parallelism by:
+
+* Running multiple `Chunker` instances on different streams
+* Using async executors (tokio) with blocking tasks
+* Managing their own thread pools
+
+The library provides pure CDC - concurrency and I/O orchestration are application responsibilities.
 
 ---
 
-## 9. Input Abstractions
+## 8. Input & Output Model
 
-`chunkrs` supports multiple input styles:
+`chunkrs` accepts `Bytes` as input and emits `Chunk` objects:
 
-* `Read` (blocking)
-* `AsyncRead` (async)
-* Application-owned buffers
-* Custom stream sources via traits
+**Input:**
 
-All inputs are normalized into a streaming byte source with preserved ordering.
+* Zero-copy slicing for efficient chunk data
+* Application owns the underlying memory
+* Supports any data source that can provide `Bytes` (files, network, buffers, etc.)
 
----
+**Output:**
 
-## 10. Output Model
-
-Each emitted chunk contains:
-
-* Content hash
-* Chunk length
-* Optional offset (if provided by source)
-* Borrowed or owned byte payload (zero-copy when possible)
-
-The crate does **not**:
-
-* Persist chunks
-* Index chunks
-* Decide reuse vs upload
+* Each chunk contains: content hash, length, optional offset, and zero-copy byte payload
+* The crate does not persist, index, or manage chunks - these are application responsibilities
 
 ---
 
-## 11. Storage & I/O Policy
+## 9. Storage & I/O Policy
 
 `chunkrs` intentionally avoids device-level assumptions:
 
@@ -198,7 +200,7 @@ and feed serialized streams into `chunkrs`.
 
 ---
 
-## 12. Failure & Recovery Semantics
+## 10. Failure & Recovery Semantics
 
 * Chunking errors are localized to the stream
 * No global state is corrupted
@@ -208,7 +210,7 @@ Checkpointing and resume logic belong to the application layer.
 
 ---
 
-## 13. Comparison to Existing Crates
+## 11. Comparison to Existing Crates
 
 ### fastcdc
 
@@ -225,27 +227,7 @@ Checkpointing and resume logic belong to the application layer.
 
 ---
 
-## 14. Crate Responsibility Boundary
-
-**`chunkrs` guarantees:**
-
-* Correct CDC
-* Stable chunk hashes
-* Efficient streaming execution
-
-**Applications decide:**
-
-* File traversal
-* Concurrency level
-* Sync protocol
-* Storage backend
-* Deduplication index
-
-This boundary is intentional and enforced by design.
-
----
-
-## 15. Module Structure
+## 12. Module Structure
 
 ```text
 chunkrs/
@@ -258,7 +240,7 @@ chunkrs/
 │
 ├── chunker/
 │   ├── mod.rs
-│   └── iter.rs         # Chunker + ChunkIter core engine
+│   └── engine.rs       # Chunker with push/finish streaming API
 │
 ├── config/
 │   └── mod.rs          # ChunkConfig + HashConfig
@@ -272,42 +254,24 @@ chunkrs/
 │
 ├── hash/
 │   ├── mod.rs
-│   └── blake3.rs       # strong hash implementation
-│
-├── buffer/
-│   ├── mod.rs
-│   └── pool.rs         # thread-local buffer reuse
-│
-├── async_stream/
-│   ├── mod.rs
-│   └── stream.rs       # AsyncRead → Stream adapter
+│   └── blake3.rs       # strong hash implementation (feature-gated)
 │
 └── util/
-    └── mod.rs          # small helpers (private)
+    └── mod.rs          # internal utility functions
 ```
 
 **Note:** `fuzz/` contains fuzz testing targets (development only) and is not part of the library structure.
 
-## 16. Summary
+## 13. Summary
 
-`chunkrs` is a **boring, fast, correct** CDC engine.
+`chunkrs` is a **deterministic, streaming, zero-copy** CDC engine.
 
-It avoids clever parallel tricks in favor of:
+It provides:
 
-* determinism-by-content
-* streaming correctness
-* allocator discipline
-* composability
+* Exact determinism - identical byte streams produce identical chunk boundaries
+* Push-based streaming API - process data of arbitrary size
+* Zero-copy chunk data via `Bytes` slicing
+* Simple, composable design - no hidden complexity
 
-If you need orchestration — build it *around* `chunkrs`.
+If you need orchestration (concurrency, I/O, storage) — build it *around* `chunkrs`.
 If you need chunking — `chunkrs` stays out of your way.
-
-## Note about arch decision
-
-1. **Application provides the byte stream**: The library accepts any `std::io::Read` or `futures_io::AsyncRead`. Whether the bytes come from a file, network socket, or in-memory buffer is entirely the application's concern. The library focuses solely on the CDC transformation.
-
-2. **Batching for I/O efficiency**: Internally reads data in ~8KB buffers to balance syscall overhead with cache-friendly processing, while maintaining CDC state across buffer boundaries for deterministic results.
-
-3. **Application-level concurrency**: Parallelize by running multiple `chunkrs` instances on different streams. The library stays out of your thread pool.
-
-4. **Allocation discipline**: No global buffer pools. Thread-local caches prevent allocator lock contention when processing thousands of small streams. Global buffer pools (`lazy_static!` pools) cause cache line bouncing and atomic contention under high concurrency. chunkrs uses **thread-local caches**—zero synchronization, maximum locality.
