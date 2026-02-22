@@ -31,6 +31,7 @@ pub struct FastCdc {
 
 impl FastCdc {
     /// Creates a new FastCDC instance.
+    #[allow(dead_code)]
     pub fn new(min_size: usize, avg_size: usize, max_size: usize, normalization_level: u8) -> Self {
         Self::with_key(min_size, avg_size, max_size, normalization_level, None)
     }
