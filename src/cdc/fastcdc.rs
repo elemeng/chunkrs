@@ -294,8 +294,7 @@ const fn shifted_gear_values() -> [u64; 256] {
 
 /// Pre-shifted gear table for optimized hashing.
 ///
-/// Each entry is `gear_table[i] << 1`, avoiding runtime shifts during the
-/// hot path of the rolling hash computation.
+
 fn gear_table_shifted() -> &'static [u64; 256] {
     static SHIFTED: [u64; 256] = shifted_gear_values();
     &SHIFTED
@@ -408,10 +407,7 @@ const MASKS: [u64; 32] = [
 
 /// Gear hash table for FastCDC (pre-computed).
 ///
-/// The gear hash is a rolling hash that uses a lookup table to quickly update
-/// the hash value as new bytes are processed. This table uses the standard
-/// values from the FastCDC reference implementation for consistency and
-/// compatibility.
+
 fn gear_table() -> &'static [u64; 256] {
     static TABLE: [u64; 256] = [
         0x4d65822107fcfd52,
@@ -676,8 +672,7 @@ fn gear_table() -> &'static [u64; 256] {
 
 /// Pre-shifted gear table for optimized hashing.
 ///
-/// Each entry is `gear_table[i] << 1`, avoiding runtime shifts during the
-/// hot path of the rolling hash computation.
+
 
 /// FastCDC rolling hash state.
 ///
@@ -698,34 +693,21 @@ fn gear_table() -> &'static [u64; 256] {
 /// - `avg_size`: Target chunk size - boundary detection adjusts around this
 /// - `max_size`: Maximum chunk size - forces a boundary if reached
 ///
-/// # Example
-///
-/// ```ignore
-/// use chunkrs::cdc::FastCdc;
-///
-/// let mut cdc = FastCdc::new(4096, 16384, 65536);
-///
-/// for byte in data {
-///     if cdc.update(byte) {
-///         println!("Boundary found!");
-///     }
-/// }
-/// ```
 #[derive(Debug, Clone)]
 pub struct FastCdc {
-    /// Current hash value.
+    
     hash: u64,
 
-    /// Minimum chunk size.
+    
     min_size: usize,
 
-    /// Average/target chunk size.
+    
     avg_size: usize,
 
-    /// Maximum chunk size.
+    
     max_size: usize,
 
-    /// Number of bytes processed since last boundary.
+    
     bytes_since_boundary: usize,
 
     /// The mask for normal chunks (based on avg_size, harder to match).
@@ -912,7 +894,7 @@ impl FastCdc {
     }
 
     /// Processes a buffer and returns the position of the first boundary found,
-    /// or None if no boundary was found in this buffer.
+    
     #[allow(dead_code)]
     pub fn find_boundary(&mut self, data: &[u8]) -> Option<usize> {
         for (i, &byte) in data.iter().enumerate() {

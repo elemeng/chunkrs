@@ -107,18 +107,6 @@ pub struct Chunker {
 
 impl Chunker {
     /// Creates a new chunker with the given configuration.
-    ///
-    /// # Arguments
-    ///
-    /// * `config` - The chunking configuration specifying min/avg/max chunk sizes and normalization level
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use chunkrs::{Chunker, ChunkConfig};
-    ///
-    /// let chunker = Chunker::new(ChunkConfig::default());
-    /// ```
     pub fn new(config: ChunkConfig) -> Self {
         #[cfg(feature = "keyed-cdc")]
         let key = config.keyed_gear_table_key();
@@ -162,49 +150,7 @@ impl Chunker {
 
     /// Pushes data into the chunker and returns complete chunks.
     ///
-    /// This method processes the incoming data along with any pending bytes
-    /// from previous calls. It returns all complete chunks found and any
-    /// unprocessed bytes that couldn't form a complete chunk.
-    ///
-    /// # Arguments
-    ///
-    /// * `data` - Input data as `Bytes` (can be zero-copy reference)
-    ///
-    /// # Returns
-    ///
-    /// A tuple `(Vec<Chunk>, Bytes)` where:
-    /// - First element: Complete chunks found during processing
-    /// - Second element: Unprocessed bytes (must be fed back in next call)
-    ///
-    /// # Processing Flow
-    ///
-    /// 1. Combine pending bytes (from previous call) with new data
-    /// 2. Process all bytes sequentially with CDC
-    /// 3. Emit chunks when boundaries are found (zero-copy slices)
-    /// 4. Return unprocessed bytes as pending
-    ///
-    /// # Important
-    ///
-    /// - **Always feed the returned `Bytes` back** in the next `push()` call
-    /// - Failing to do so will break determinism
-    /// - Accumulating returned `Vec<Chunk>` may OOM - process promptly
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use chunkrs::{Chunker, ChunkConfig};
-    /// use bytes::Bytes;
-    ///
-    /// let mut chunker = Chunker::new(ChunkConfig::default());
-    /// let mut pending = Bytes::new();
-    ///
-    /// // Process data
-    /// for chunk in &[Bytes::from(&b"hello"[..]), Bytes::from(&b" world"[..])] {
-    ///     let (chunks, leftover) = chunker.push(pending);
-    ///     // Process chunks...
-    ///     pending = leftover;
-    /// }
-    /// ```
+    /// Returns `(Vec<Chunk>, Bytes)` where the second element must be fed back in the next call.
     pub fn push(&mut self, data: Bytes) -> (Vec<Chunk>, Bytes) {
         let mut chunks = Vec::new();
 
@@ -248,34 +194,6 @@ impl Chunker {
     }
 
     /// Finalizes the chunker and returns the final chunk if any.
-    ///
-    /// Call this method when the input stream ends. It returns any remaining
-    /// data as a final chunk, or `None` if there's no pending data.
-    ///
-    /// After calling `finish()`, the chunker is reset and can be reused for
-    /// a new stream.
-    ///
-    /// # Returns
-    ///
-    /// - `Some(Chunk)` - Final chunk with remaining data
-    /// - `None` - No pending data
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use chunkrs::{Chunker, ChunkConfig};
-    /// use bytes::Bytes;
-    ///
-    /// let mut chunker = Chunker::new(ChunkConfig::default());
-    ///
-    /// // Process all data
-    /// let (_, _) = chunker.push(Bytes::from("some data"));
-    ///
-    /// // Finalize stream
-    /// if let Some(final_chunk) = chunker.finish() {
-    ///     println!("Final chunk: {} bytes", final_chunk.len());
-    /// }
-    /// ```
     pub fn finish(&mut self) -> Option<Chunk> {
         if let Some(pending) = self.pending.take() {
             if pending.is_empty() {
@@ -293,28 +211,6 @@ impl Chunker {
     }
 
     /// Resets the chunker state for a new stream.
-    ///
-    /// Clears CDC state, pending data, and offset. Useful for reusing the
-    /// same `Chunker` instance for multiple streams.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use chunkrs::{Chunker, ChunkConfig};
-    /// use bytes::Bytes;
-    ///
-    /// let mut chunker = Chunker::new(ChunkConfig::default());
-    ///
-    /// // Process first stream
-    /// let _ = chunker.push(Bytes::from("first"));
-    /// let _ = chunker.finish();
-    ///
-    /// // Reset for second stream
-    /// chunker.reset();
-    ///
-    /// // Process second stream
-    /// let _ = chunker.push(Bytes::from("second"));
-    /// ```
     pub fn reset(&mut self) {
         self.cdc.reset();
         self.pending = None;
@@ -322,22 +218,16 @@ impl Chunker {
     }
 
     /// Returns the current offset in the stream.
-    ///
-    /// This is the byte position of the next chunk to be emitted.
     pub fn offset(&self) -> u64 {
         self.offset
     }
 
     /// Returns the number of pending bytes waiting for more input.
-    ///
-    /// These bytes have been processed by CDC but haven't formed a complete
-    /// chunk boundary yet.
     pub fn pending_len(&self) -> usize {
         self.pending.as_ref().map(|b| b.len()).unwrap_or(0)
     }
 
-    /// Returns the configuration used by this chunker.
-    pub fn config(&self) -> &ChunkConfig {
+pub fn config(&self) -> &ChunkConfig {
         &self.config
     }
 }

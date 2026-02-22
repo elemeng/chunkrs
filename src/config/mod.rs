@@ -1,24 +1,7 @@
 //! Configuration for chunking behavior.
 //!
-//! This module provides types to configure how chunking is performed:
-//!
 //! - [`ChunkConfig`] - Controls chunk size boundaries and hashing behavior
 //! - [`HashConfig`] - Specifies whether to compute cryptographic hashes
-//!
-//! # Example
-//!
-//! ```
-//! use chunkrs::{ChunkConfig, HashConfig};
-//!
-//! // Custom chunk sizes
-//! let config = ChunkConfig::new(4096, 16384, 65536)?;
-//!
-//! // Enable hashing
-//! let config = ChunkConfig::default()
-//!     .with_hash_config(HashConfig::enabled());
-//!
-//! # Ok::<(), chunkrs::ChunkError>(())
-//! ```
 
 use crate::error::ChunkError;
 
@@ -31,83 +14,26 @@ pub const DEFAULT_AVG_CHUNK_SIZE: usize = 16 * 1024;
 /// Default maximum chunk size (64 KiB).
 pub const DEFAULT_MAX_CHUNK_SIZE: usize = 64 * 1024;
 
-/// Default normalization level for FastCDC mask generation.
-///
-/// Controls how aggressively chunk sizes are distributed around the average.
-/// Level 2 means masks differ by ±2 bits from the base mask at avg_size.
-/// This matches the Go FastCDC implementation's default.
+/// Default normalization level (masks differ by ±2 bits, matches Go FastCDC).
 pub const DEFAULT_NORMALIZATION_LEVEL: u8 = 2;
 
 /// Configuration for content-defined chunking behavior.
 ///
-/// `ChunkConfig` controls the size constraints and hashing behavior for the
-/// chunking process. It uses the FastCDC algorithm which requires:
+/// Size constraints: `min_size <= avg_size <= max_size`, all must be powers of 2.
 ///
-/// - Minimum chunk size (`min_size`) - No chunk will be smaller than this
-/// - Average chunk size (`avg_size`) - Target size for most chunks
-/// - Maximum chunk size (`max_size`) - No chunk will exceed this
-/// - Normalization level (`normalization_level`) - Controls chunk size distribution
-///
-/// # Size Constraints
-///
-/// All sizes must be:
-/// - Non-zero
-/// - Powers of 2 (for optimal performance)
-/// - Ordered: `min_size <= avg_size <= max_size`
-///
-/// # Normalization Level
-///
-/// The normalization level controls how aggressively chunk sizes are distributed
-/// around the average:
-///
-/// - **Level 0**: No normalization - single mask throughout
-/// - **Level 1** (default): Masks differ by ±1 bit - balanced distribution
-/// - **Level 2+**: Masks differ by ±N bits - tighter distribution
-///
-/// Higher levels produce more predictable chunk sizes but may reduce deduplication
-/// ratio for heterogeneous data.
-///
-/// # Example
-///
-/// ```
-/// use chunkrs::ChunkConfig;
-///
-/// // Use default configuration
-/// let config = ChunkConfig::default();
-///
-/// // Custom configuration
-/// let config = ChunkConfig::new(4096, 16384, 65536)?;
-///
-/// // Builder pattern
-/// let config = ChunkConfig::default()
-///     .with_min_size(8192)
-///     .with_avg_size(32768)
-///     .with_max_size(131072)
-///     .with_normalization_level(2);
-/// # Ok::<(), chunkrs::ChunkError>(())
-/// ```
+/// Normalization level controls chunk size distribution:
+/// - Level 0: Single mask throughout
+/// - Level 1: Masks differ by ±1 bit (balanced)
+/// - Level N: Masks differ by ±N bits (tighter distribution, less deduplication)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkConfig {
-    /// Minimum chunk size in bytes.
     min_size: usize,
-
-    /// Average/target chunk size in bytes.
     avg_size: usize,
-
-    /// Maximum chunk size in bytes.
     max_size: usize,
-
-    /// Normalization level for mask generation (0-31).
     normalization_level: u8,
-
-    /// Configuration for hashing behavior.
     hash_config: HashConfig,
 
-    /// Optional key for keyed gear table (security feature).
-    ///
-    /// When set, the gear table is hashed with this key using BLAKE3,
-    /// preventing adversarial chunk boundary manipulation attacks.
-    /// This requires the `keyed-cdc` feature flag.
+    /// Key for keyed gear table (requires `keyed-cdc` feature).
     #[cfg(feature = "keyed-cdc")]
     key: Option<[u8; 32]>,
 }
@@ -115,28 +41,7 @@ pub struct ChunkConfig {
 impl ChunkConfig {
     /// Creates a new configuration with the specified size bounds.
     ///
-    /// # Arguments
-    ///
-    /// * `min_size` - Minimum chunk size in bytes (must be power of 2)
-    /// * `avg_size` - Average/target chunk size in bytes (must be power of 2)
-    /// * `max_size` - Maximum chunk size in bytes (must be power of 2)
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ChunkError::InvalidConfig`] if:
-    /// - Any size is zero
-    /// - `min_size > avg_size` or `avg_size > max_size`
-    /// - Sizes are not powers of 2
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use chunkrs::ChunkConfig;
-    ///
-    /// let config = ChunkConfig::new(4096, 16384, 65536)?;
-    /// assert_eq!(config.min_size(), 4096);
-    /// # Ok::<(), chunkrs::ChunkError>(())
-    /// ```
+    /// Returns error if sizes are zero, not powers of 2, or out of order.
     pub fn new(min_size: usize, avg_size: usize, max_size: usize) -> Result<Self, ChunkError> {
         if min_size == 0 || avg_size == 0 || max_size == 0 {
             return Err(ChunkError::InvalidConfig {
@@ -181,115 +86,36 @@ impl ChunkConfig {
     }
 
     /// Sets the minimum chunk size.
-    ///
-    /// Note: This does not validate the configuration. Use [`ChunkConfig::validate`]
-    /// to check if the configuration is valid.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use chunkrs::ChunkConfig;
-    ///
-    /// let config = ChunkConfig::default().with_min_size(8192);
-    /// assert_eq!(config.min_size(), 8192);
-    /// ```
     pub fn with_min_size(mut self, size: usize) -> Self {
         self.min_size = size;
         self
     }
 
     /// Sets the average/target chunk size.
-    ///
-    /// Note: This does not validate the configuration. Use [`ChunkConfig::validate`]
-    /// to check if the configuration is valid.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use chunkrs::ChunkConfig;
-    ///
-    /// let config = ChunkConfig::default().with_avg_size(32768);
-    /// assert_eq!(config.avg_size(), 32768);
-    /// ```
     pub fn with_avg_size(mut self, size: usize) -> Self {
         self.avg_size = size;
         self
     }
 
     /// Sets the maximum chunk size.
-    ///
-    /// Note: This does not validate the configuration. Use [`ChunkConfig::validate`]
-    /// to check if the configuration is valid.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use chunkrs::ChunkConfig;
-    ///
-    /// let config = ChunkConfig::default().with_max_size(131072);
-    /// assert_eq!(config.max_size(), 131072);
-    /// ```
     pub fn with_max_size(mut self, size: usize) -> Self {
         self.max_size = size;
         self
     }
 
-    /// Sets the normalization level for mask generation.
-    ///
-    /// Higher levels produce more predictable chunk sizes by making the mask
-    /// transition more aggressive. Valid range is 0-31.
-    ///
-    /// Note: This does not validate the configuration. Use [`ChunkConfig::validate`]
-    /// to check if the configuration is valid.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use chunkrs::ChunkConfig;
-    ///
-    /// let config = ChunkConfig::default().with_normalization_level(2);
-    /// assert_eq!(config.normalization_level(), 2);
-    /// ```
+    /// Sets the normalization level for mask generation (0-31).
     pub fn with_normalization_level(mut self, level: u8) -> Self {
         self.normalization_level = level;
         self
     }
 
     /// Sets the hash configuration.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use chunkrs::{ChunkConfig, HashConfig};
-    ///
-    /// let config = ChunkConfig::default()
-    ///     .with_hash_config(HashConfig::enabled());
-    /// ```
     pub fn with_hash_config(mut self, config: HashConfig) -> Self {
         self.hash_config = config;
         self
     }
 
-    /// Sets the key for keyed gear table generation.
-    ///
-    /// When a key is set, the gear table is hashed with this key using BLAKE3,
-    /// preventing adversarial chunk boundary manipulation attacks. This is useful
-    /// for public-facing deduplication services.
-    ///
-    /// This requires the `keyed-cdc` feature flag.
-    ///
-    /// # Arguments
-    ///
-    /// * `key` - A 32-byte key, or None to disable keyed mode
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// use chunkrs::ChunkConfig;
-    ///
-    /// let key = [0u8; 32];
-    /// let config = ChunkConfig::default().with_keyed_gear_table(Some(key));
-    /// ```
+    /// Sets the key for keyed gear table (requires `keyed-cdc` feature).
     #[cfg(feature = "keyed-cdc")]
     pub fn with_keyed_gear_table(mut self, key: Option<[u8; 32]>) -> Self {
         self.key = key;
@@ -321,26 +147,13 @@ impl ChunkConfig {
         &self.hash_config
     }
 
-    /// Returns the key for keyed gear table, if set.
-    ///
-    /// This requires the `keyed-cdc` feature flag.
+    /// Returns the key for keyed gear table, if set (requires `keyed-cdc` feature).
     #[cfg(feature = "keyed-cdc")]
     pub fn keyed_gear_table_key(&self) -> Option<[u8; 32]> {
         self.key
     }
 
     /// Validates the current configuration.
-    ///
-    /// Returns an error if the configuration is invalid.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use chunkrs::ChunkConfig;
-    ///
-    /// let config = ChunkConfig::default().with_min_size(0);
-    /// assert!(config.validate().is_err());
-    /// ```
     pub fn validate(&self) -> Result<(), ChunkError> {
         Self::new(self.min_size, self.avg_size, self.max_size).map(|_| ())
     }
@@ -362,20 +175,8 @@ impl Default for ChunkConfig {
 
 /// Configuration for chunk hashing behavior.
 ///
-/// `HashConfig` controls whether BLAKE3 cryptographic hashes are computed
-/// for each chunk. Hashing is enabled by default.
-///
-/// # Example
-///
-/// ```
-/// use chunkrs::HashConfig;
-///
-/// // Enable hashing
-/// let config = HashConfig::enabled();
-///
-/// // Disable hashing
-/// let config = HashConfig::disabled();
-/// ```
+/// Controls whether BLAKE3 cryptographic hashes are computed for each chunk.
+/// Hashing is enabled by default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct HashConfig {
     /// Whether to compute BLAKE3 hashes for chunks.
@@ -384,38 +185,16 @@ pub struct HashConfig {
 
 impl HashConfig {
     /// Creates a new hash configuration.
-    ///
-    /// # Arguments
-    ///
-    /// * `enabled` - Whether to enable hashing
     pub const fn new(enabled: bool) -> Self {
         Self { enabled }
     }
 
     /// Enables hashing.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use chunkrs::HashConfig;
-    ///
-    /// let config = HashConfig::enabled();
-    /// assert!(config.enabled);
-    /// ```
     pub const fn enabled() -> Self {
         Self { enabled: true }
     }
 
     /// Disables hashing.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use chunkrs::HashConfig;
-    ///
-    /// let config = HashConfig::disabled();
-    /// assert!(!config.enabled);
-    /// ```
     pub const fn disabled() -> Self {
         Self { enabled: false }
     }
