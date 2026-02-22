@@ -106,12 +106,12 @@ impl Chunker {
     }
 
     /// Computes hash for the given data if hashing is enabled.
-    fn compute_hash(&self, data: &[u8]) -> Option<crate::chunk::ChunkHash> {
+    fn compute_hash(&self, _data: &[u8]) -> Option<crate::chunk::ChunkHash> {
         if !self.config.hash_config().enabled {
             return None;
         }
         #[cfg(feature = "hash-blake3")]
-        return Some(crate::hash::Blake3Hasher::hash(data));
+        return Some(crate::hash::Blake3Hasher::hash(_data));
         #[cfg(not(feature = "hash-blake3"))]
         return None;
     }
