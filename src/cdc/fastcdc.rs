@@ -1,6 +1,27 @@
 //! FastCDC rolling hash implementation.
+//!
+//! This module implements the FastCDC (Fast Content-Defined Chunking) algorithm
+//! for efficient content-defined chunking.
+//!
+//! # Algorithm Overview
+//!
+//! FastCDC uses a rolling hash to identify chunk boundaries based on content
+//! patterns rather than fixed sizes. Key features:
+//!
+//! - **Zero-padded masks**: Uses distributed bit masks for better deduplication ratio
+//! - **Dual gear tables**: Pre-computed tables for faster hashing
+//! - **Normalized chunking**: Two-stage masks to control chunk size distribution
+//! - **Deterministic**: Same input always produces same chunk boundaries
+//!
+//! # References
+//!
+//! W. Xia et al., “The Design of Fast Content-Defined Chunking for Data Deduplication Based Storage Systems,”
+//! IEEE Transactions on Parallel and Distributed Systems, vol. 31, no. 9, pp. 2017–2031, Sep. 2020,
+//! doi: 10.1109/tpds.2020.2984632.
+//!
+//! PlakarKorp's Golang implemention: https://github.com/PlakarKorp/go-cdc-chunkers/tree/main/chunkers/fastcdc
 
-use crate::cdc::tables::{MASKS, GEAR_TABLE_SHIFTED};
+use crate::cdc::tables::{GEAR_TABLE_SHIFTED, MASKS};
 
 #[cfg(feature = "keyed-cdc")]
 use crate::cdc::tables::generate_keyed_gear_table_shifted;
@@ -226,7 +247,10 @@ mod tests {
             let boundaries1: Vec<bool> = data.iter().map(|&b| cdc1.update(b)).collect();
             let boundaries2: Vec<bool> = data.iter().map(|&b| cdc2.update(b)).collect();
 
-            assert_eq!(boundaries1, boundaries2, "Keyed CDC should be deterministic");
+            assert_eq!(
+                boundaries1, boundaries2,
+                "Keyed CDC should be deterministic"
+            );
         }
     }
 
