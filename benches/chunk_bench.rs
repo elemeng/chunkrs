@@ -2,10 +2,15 @@
 //!
 //! Run with:
 //!     cargo bench
+//!
+//! Run with specific benchmark:
+//!     cargo bench -- bench_chunker
+//!
+//! Run with keyed-cdc feature:
+//!     cargo bench --features keyed-cdc
 
 use bytes::Bytes;
-use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
-
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use chunkrs::{ChunkConfig, Chunker};
 
 fn bench_chunker(c: &mut Criterion) {
@@ -101,6 +106,38 @@ fn bench_configs(c: &mut Criterion) {
     group.finish();
 }
 
+#[cfg(feature = "keyed-cdc")]
+fn bench_keyed_cdc(c: &mut Criterion) {
+    let mut group = c.benchmark_group("keyed_cdc");
+    let size = 1024 * 1024; // 1 MB
+    let data: Vec<u8> = (0..size).map(|i| (i * 7 + 13) as u8).collect();
+
+    // Keyed CDC with random key
+    group.bench_function("keyed", |b| {
+        let key = [0u8; 32];
+        let config = ChunkConfig::default().with_keyed_gear_table(Some(key));
+        b.iter(|| {
+            let mut chunker = Chunker::new(config);
+            let (chunks, _) = chunker.push(Bytes::from(black_box(data.clone())));
+            let _final = chunker.finish();
+            black_box(chunks.len())
+        });
+    });
+
+    // Non-keyed (baseline comparison)
+    group.bench_function("non_keyed", |b| {
+        let config = ChunkConfig::default().with_keyed_gear_table(None);
+        b.iter(|| {
+            let mut chunker = Chunker::new(config);
+            let (chunks, _) = chunker.push(Bytes::from(black_box(data.clone())));
+            let _final = chunker.finish();
+            black_box(chunks.len())
+        });
+    });
+
+    group.finish();
+}
+
 fn bench_streaming(c: &mut Criterion) {
     let mut group = c.benchmark_group("streaming");
     let size = 1024 * 1024; // 1 MB
@@ -138,5 +175,16 @@ fn bench_streaming(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_chunker, bench_configs, bench_streaming);
+// Conditionally include keyed-cdc benchmarks
+criterion_group!(
+    benches,
+    bench_chunker,
+    bench_configs,
+    bench_streaming
+);
+
+// Add keyed-cdc benchmarks only when feature is enabled
+#[cfg(feature = "keyed-cdc")]
+criterion_group!(keyed_benches, bench_keyed_cdc);
+
 criterion_main!(benches);

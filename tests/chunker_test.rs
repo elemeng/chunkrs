@@ -1,5 +1,14 @@
-// Integration tests for the Chunker streaming API
-// Tests cover: push/finish semantics, determinism, hashing, edge cases
+// Integration tests for the Chunker streaming API.
+//
+// Test categories:
+// - Basic Functionality: empty input, small data, large data
+// - Streaming and Push/FINISH Semantics: batch processing, pending bytes
+// - Offset Tracking: position tracking, reset behavior
+// - Size Constraints: min/max size enforcement
+// - Determinism: same input → same output regardless of batching
+// - Zero-Copy Verification: memory efficiency validation
+// - Hashing Tests: hash generation and consistency
+// - Edge Cases: validation, error conditions, data integrity
 
 use bytes::Bytes;
 use chunkrs::{ChunkConfig, Chunker, HashConfig};
@@ -10,6 +19,7 @@ use chunkrs::{ChunkConfig, Chunker, HashConfig};
 
 #[test]
 fn test_empty_input() {
+    // Empty input should produce no chunks and no pending bytes
     let mut chunker = Chunker::default();
     let (chunks, pending) = chunker.push(Bytes::new());
 
@@ -89,9 +99,10 @@ fn test_large_data_finds_boundaries() {
 
 #[test]
 fn test_streaming_data_in_batches() {
+    // Simulate streaming data in 4 batches totaling 1000 bytes
+    // Verify that streaming preserves total byte count across batches
     let mut chunker = Chunker::new(ChunkConfig::new(4, 16, 64).unwrap());
 
-    // Simulate streaming data in 4 batches totaling 1000 bytes
     let batches = vec![
         Bytes::from(&[0xAAu8; 256][..]),
         Bytes::from(&[0xBBu8; 256][..]),
@@ -253,6 +264,9 @@ fn test_exact_max_size_boundary() {
 
 #[test]
 fn test_determinism_across_push_sizes() {
+    // Critical test: verifies that chunk boundaries are identical
+    // regardless of how data is fed into the chunker.
+    // This is essential for delta sync correctness and reproducibility.
     let data: Vec<u8> = (0..500).map(|i| (i % 256) as u8).collect();
     let config = ChunkConfig::new(4, 16, 64).unwrap();
 
@@ -336,6 +350,8 @@ fn test_same_stream_same_chunks_same_hashes() {
 
 #[test]
 fn test_zero_copy_semantics() {
+    // Verify that chunk data is a slice of the original Bytes,
+    // not a copy. This ensures memory efficiency.
     let mut chunker = Chunker::new(ChunkConfig::new(4, 16, 64).unwrap());
     let original = Bytes::from(&b"hello world, zero copy test data"[..]);
 
@@ -343,7 +359,8 @@ fn test_zero_copy_semantics() {
     let final_chunk = chunker.finish();
 
     for chunk in chunks.iter().chain(final_chunk.iter()) {
-        // Verify chunk data is a slice of the original
+        // Verify chunk data is a slice of the original Bytes
+        // (not a copy or separate allocation)
         assert!(
             chunk.data.as_ptr() >= original.as_ptr()
                 && (chunk.data.as_ptr() as usize + chunk.data.len())
@@ -459,6 +476,8 @@ mod hashing_tests {
 
 #[test]
 fn test_config_validation() {
+    // Verify that invalid configurations are rejected
+
     // Invalid: min > avg
     assert!(
         ChunkConfig::new(16, 8, 64).is_err(),
@@ -514,6 +533,9 @@ fn test_hash_config_consistency() {
 
 #[test]
 fn test_pending_bytes_data_integrity() {
+    // Verify that pending bytes preserve data integrity when combined
+    // with subsequent pushes. This tests the state management across
+    // multiple push() calls.
     let mut chunker = Chunker::new(ChunkConfig::new(16, 32, 64).unwrap());
 
     let data1 = Bytes::from(&b"partial"[..]);
