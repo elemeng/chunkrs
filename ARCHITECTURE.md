@@ -172,14 +172,41 @@ The crate does not persist, index, or manage chunks.
 
 ## Appendix: Module Structure
 
+### Flat API Design
+
+`chunkrs` uses a **flat API design** for "small, composable primitive" positioning. All public types are accessible directly from the crate root:
+
+```
+chunkrs::Chunk
+chunkrs::ChunkHash
+chunkrs::Chunker
+chunkrs::ChunkConfig
+chunkrs::HashConfig
+chunkrs::ChunkError
+```
+
+### Module Organization
+
 ```
 chunkrs/
-├── lib.rs
-├── chunk/          # Chunk, ChunkHash
-├── chunker/        # Chunker with push/finish API
-├── config/         # ChunkConfig, HashConfig
-├── error/          # ChunkError
-├── cdc/            # FastCDC rolling hash
-├── hash/           # BLAKE3 (feature-gated)
-└── util/           # Internal helpers
+├── lib.rs              # Public API: pub use re-exports only
+├── chunk/              # Private: Chunk, ChunkHash
+├── chunker/            # Private: Chunker with push/finish API
+├── config/             # Private: ChunkConfig, HashConfig
+├── error/              # Private: ChunkError
+├── cdc/                # Private: FastCDC rolling hash
+├── hash/               # Private: BLAKE3 (feature-gated)
+└── util/               # Private: Internal helpers
 ```
+
+### Visibility Strategy
+
+- **Public modules**: None - modules are private for code organization only
+- **Public API**: Only `pub use` re-exports in `lib.rs`
+- **Internal sharing**: Private modules use `pub` for crate-local sharing
+- **No `pub(crate)`**: Eliminated for cleaner boundaries
+
+This design ensures:
+- No duplicate access paths (e.g., `chunkrs::Chunk` vs `chunkrs::chunk::Chunk`)
+- Minimal public API surface
+- Clear separation between public API and implementation details

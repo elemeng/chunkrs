@@ -18,11 +18,13 @@ Zero-copy streaming. Async-agnostic. Excellent for any chunking and hashing use 
 - **FastCDC algorithm**: Byte-by-byte gear hash rolling with configurable min/avg/max sizes
 - **BLAKE3 identity**: Cryptographic chunk hashing (optional, feature-gated)
 - **Strictly safe**: `#![forbid(unsafe_code)]` - zero unsafe code throughout
-- **Minimal API**: Only 6 public types - `Chunker`, `Chunk`, `ChunkHash`, `ChunkConfig`, `HashConfig`, `ChunkError`
+- **Minimal API**: Only 6 public types accessible from crate root - `Chunker`, `Chunk`, `ChunkHash`, `ChunkConfig`, `HashConfig`, `ChunkError`
 - **Well-tested**: Comprehensive unit tests, integration tests, and fuzzing
 
 ## Recent Improvements
 
+- **Flat API design**: Implemented clean, flat API with no duplicate paths (e.g., only `chunkrs::Chunk`, not `chunkrs::chunk::Chunk`)
+- **Clean module visibility**: Eliminated all `pub(crate)` usage using layered visibility architecture
 - **Optimized Bytes handling**: Eliminated unnecessary allocations in examples and tests
 - **Consolidated helpers**: Extracted duplicate code into reusable helper methods
 - **Simplified architecture**: Removed unused hasher state for better performance
@@ -106,6 +108,16 @@ Each `Chunk` contains:
 
 ## API Overview
 
+### Flat API Design
+
+`chunkrs` uses a flat API design for simplicity and clarity. All types are accessible directly from the crate root:
+
+```rust
+use chunkrs::{Chunker, Chunk, ChunkHash, ChunkConfig, HashConfig, ChunkError};
+```
+
+No duplicate paths like `chunkrs::chunk::Chunk` - only `chunkrs::Chunk`.
+
 ### Core Types
 
 | Type | Description |
@@ -114,6 +126,7 @@ Each `Chunk` contains:
 | `Chunk` | Content-addressed block with `Bytes` payload and optional BLAKE3 hash |
 | `ChunkHash` | 32-byte BLAKE3 hash identifying chunk content |
 | `ChunkConfig` | Min/avg/max chunk sizes and hash configuration |
+| `HashConfig` | Hash algorithm configuration (BLAKE3) |
 | `ChunkError` | Error type for chunking operations |
 
 ### Streaming API
