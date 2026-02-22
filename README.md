@@ -35,61 +35,6 @@ Zero-copy streaming. Async-agnostic. Excellent for any chunking and hashing use 
 | `chunker.push(bytes)` | ✅ Kept - core streaming API |
 | `chunker.finish()` | ✅ Kept - finalize stream |
 
-### Migration Guide
-
-**v0.8 - File chunking:**
-```rust
-// v0.8 - no longer available
-let chunks = chunker.chunk_file("path/to/file")?;
-```
-
-**v0.9 - File chunking:**
-```rust
-// v0.9 - read file yourself, feed to chunker
-use std::fs::File;
-use std::io::Read;
-
-let mut file = File::open("path/to/file")?;
-let mut buffer = vec![0u8; 8192];
-let mut chunker = Chunker::new(ChunkConfig::default());
-
-loop {
-    let n = file.read(&mut buffer)?;
-    if n == 0 { break; }
-    let (chunks, leftover) = chunker.push(Bytes::copy_from_slice(&buffer[..n]));
-    // process chunks...
-}
-if let Some(final_chunk) = chunker.finish() {
-    // process final chunk...
-}
-```
-
-**v0.8 - Async file chunking:**
-```rust
-// v0.8 - no longer available
-let chunks = chunker.chunk_async(reader).await?;
-```
-
-**v0.9 - Async file chunking:**
-```rust
-// v0.9 - use your async runtime with standard Chunker
-use tokio::io::AsyncReadExt;
-
-let mut reader = reader;
-let mut chunker = Chunker::new(ChunkConfig::default());
-let mut buffer = vec![0u8; 8192];
-
-loop {
-    let n = reader.read(&mut buffer).await?;
-    if n == 0 { break; }
-    let (chunks, leftover) = chunker.push(Bytes::copy_from_slice(&buffer[..n]));
-    // process chunks...
-}
-if let Some(final_chunk) = chunker.finish() {
-    // process final chunk...
-}
-```
-
 ### Benefits of the New Design
 
 - **Simpler**: One API (`push()`) for all data sources
@@ -391,6 +336,65 @@ chunkrs = { version = "0.9", default-features = false }
 - Hardware-accelerated hashing (BLAKE3 SIMD, SHA-NI)
 - Advanced CDC algorithm variants (e.g., pattern-aware chunking)
 - `no_std` support for embedded environments
+
+### Migration Guide
+
+**v0.8 - File chunking:**
+
+```rust
+// v0.8 - no longer available
+let chunks = chunker.chunk_file("path/to/file")?;
+```
+
+**v0.9 - File chunking:**
+
+```rust
+// v0.9 - read file yourself, feed to chunker
+use std::fs::File;
+use std::io::Read;
+
+let mut file = File::open("path/to/file")?;
+let mut buffer = vec![0u8; 8192];
+let mut chunker = Chunker::new(ChunkConfig::default());
+
+loop {
+    let n = file.read(&mut buffer)?;
+    if n == 0 { break; }
+    let (chunks, leftover) = chunker.push(Bytes::copy_from_slice(&buffer[..n]));
+    // process chunks...
+}
+if let Some(final_chunk) = chunker.finish() {
+    // process final chunk...
+}
+```
+
+**v0.8 - Async file chunking:**
+
+```rust
+// v0.8 - no longer available
+let chunks = chunker.chunk_async(reader).await?;
+```
+
+**v0.9 - Async file chunking:**
+
+```rust
+// v0.9 - use your async runtime with standard Chunker
+use tokio::io::AsyncReadExt;
+
+let mut reader = reader;
+let mut chunker = Chunker::new(ChunkConfig::default());
+let mut buffer = vec![0u8; 8192];
+
+loop {
+    let n = reader.read(&mut buffer).await?;
+    if n == 0 { break; }
+    let (chunks, leftover) = chunker.push(Bytes::copy_from_slice(&buffer[..n]));
+    // process chunks...
+}
+if let Some(final_chunk) = chunker.finish() {
+    // process final chunk...
+}
+```
 
 ### Non-Goals
 
