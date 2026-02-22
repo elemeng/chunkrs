@@ -385,10 +385,12 @@ impl FastCdc {
             return true;
         }
 
-        // Use different masks based on current size (normalized chunking)
-        // Before avg_size: harder to match (more bits, fewer small chunks)
-        // After avg_size: easier to match (fewer bits, fewer large chunks)
-        let mask = if self.bytes_since_boundary < self.avg_size {
+        // Determine the mask to use
+        // Start with mask_s (harder to match), switch to mask_l at avg_size
+        // This optimization avoids checking the condition on every byte
+        let mask = if self.bytes_since_boundary == self.avg_size {
+            self.mask_l
+        } else if self.bytes_since_boundary < self.avg_size {
             self.mask_s
         } else {
             self.mask_l
