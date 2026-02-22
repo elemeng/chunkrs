@@ -293,14 +293,6 @@ chunkrs = { version = "0.9", default-features = false }
 
 ### Planned Enhancements
 
-**0.9.x — Production Hardening:**
-
-- Extended cross-platform testing (Windows, macOS, Linux variants)
-- Additional fuzzing targets for edge cases
-- Miri validation for memory safety
-- Performance profiling and optimization for specific workloads
-- Enhanced error messages with context
-
 **1.0.0 — Stable Release:**
 
 - Alternative hash algorithms (xxHash for speed, SHA-256 for compatibility)
