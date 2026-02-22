@@ -34,8 +34,9 @@ pub const DEFAULT_MAX_CHUNK_SIZE: usize = 64 * 1024;
 /// Default normalization level for FastCDC mask generation.
 ///
 /// Controls how aggressively chunk sizes are distributed around the average.
-/// Level 1 means masks differ by ±1 bit from the base mask at avg_size.
-pub const DEFAULT_NORMALIZATION_LEVEL: u8 = 1;
+/// Level 2 means masks differ by ±2 bits from the base mask at avg_size.
+/// This matches the Go FastCDC implementation's default.
+pub const DEFAULT_NORMALIZATION_LEVEL: u8 = 2;
 
 /// Configuration for content-defined chunking behavior.
 ///
@@ -166,7 +167,7 @@ impl ChunkConfig {
         // Validate normalization level doesn't exceed available bits
         let avg_bits = avg_size.trailing_zeros() as u8;
         // Use the smaller of default level and available bits
-        let effective_level = DEFAULT_NORMALIZATION_LEVEL.min(avg_bits.saturating_sub(1));
+        let effective_level = DEFAULT_NORMALIZATION_LEVEL.min(avg_bits.saturating_sub(2));
 
         Ok(Self {
             min_size,
