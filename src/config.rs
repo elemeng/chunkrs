@@ -1,30 +1,30 @@
 //! Configuration for chunking behavior.
 //!
-//! - [`ChunkConfig`] - Controls chunk size boundaries and hashing behavior
-//! - [`HashConfig`] - Specifies whether to compute cryptographic hashes
+//! - [`ChunkConfig`] - Chunk size boundaries and hashing
+//! - [`HashConfig`] - Hash computation control
 
 use crate::error::ChunkError;
 
 /// Default minimum chunk size (4 KiB).
 pub const DEFAULT_MIN_CHUNK_SIZE: usize = 4 * 1024;
 
-/// Default average/target chunk size (16 KiB).
+/// Default average chunk size (16 KiB).
 pub const DEFAULT_AVG_CHUNK_SIZE: usize = 16 * 1024;
 
 /// Default maximum chunk size (64 KiB).
 pub const DEFAULT_MAX_CHUNK_SIZE: usize = 64 * 1024;
 
-/// Default normalization level (masks differ by ±2 bits, matches Go FastCDC).
+/// Default normalization level (masks differ by ±2 bits).
 pub const DEFAULT_NORMALIZATION_LEVEL: u8 = 2;
 
-/// Configuration for content-defined chunking behavior.
+/// Configuration for content-defined chunking.
 ///
-/// Size constraints: `min_size <= avg_size <= max_size`, all must be powers of 2.
+/// Size constraints: `min_size <= avg_size <= max_size`, all powers of 2.
 ///
 /// Normalization level controls chunk size distribution:
-/// - Level 0: Single mask throughout
-/// - Level 1: Masks differ by ±1 bit (balanced)
-/// - Level N: Masks differ by ±N bits (tighter distribution, less deduplication)
+/// - Level 0: Single mask
+/// - Level 1: Masks differ by ±1 bit
+/// - Level N: Masks differ by ±N bits
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkConfig {
     min_size: usize,
@@ -32,14 +32,12 @@ pub struct ChunkConfig {
     max_size: usize,
     normalization_level: u8,
     hash_config: HashConfig,
-
-    /// Key for keyed gear table (requires `keyed-cdc` feature).
     #[cfg(feature = "keyed-cdc")]
     key: Option<[u8; 32]>,
 }
 
 impl ChunkConfig {
-    /// Creates a new configuration with the specified size bounds.
+    /// Creates a new configuration.
     ///
     /// Returns error if sizes are zero, not powers of 2, or out of order.
     pub fn new(min_size: usize, avg_size: usize, max_size: usize) -> Result<Self, ChunkError> {
@@ -61,17 +59,14 @@ impl ChunkConfig {
             });
         }
 
-        // FastCDC works best with power-of-2 sizes
         if !min_size.is_power_of_two() || !avg_size.is_power_of_two() || !max_size.is_power_of_two()
         {
             return Err(ChunkError::InvalidConfig {
-                message: "chunk sizes should be powers of 2 for optimal performance",
+                message: "chunk sizes should be powers of 2",
             });
         }
 
-        // Validate normalization level doesn't exceed available bits
         let avg_bits = avg_size.trailing_zeros() as u8;
-        // Use the smaller of default level and available bits
         let effective_level = DEFAULT_NORMALIZATION_LEVEL.min(avg_bits.saturating_sub(2));
 
         Ok(Self {
@@ -91,7 +86,7 @@ impl ChunkConfig {
         self
     }
 
-    /// Sets the average/target chunk size.
+    /// Sets the average chunk size.
     pub fn with_avg_size(mut self, size: usize) -> Self {
         self.avg_size = size;
         self
@@ -103,7 +98,7 @@ impl ChunkConfig {
         self
     }
 
-    /// Sets the normalization level for mask generation (0-31).
+    /// Sets the normalization level (0-31).
     pub fn with_normalization_level(mut self, level: u8) -> Self {
         self.normalization_level = level;
         self
@@ -127,7 +122,7 @@ impl ChunkConfig {
         self.min_size
     }
 
-    /// Returns the average/target chunk size.
+    /// Returns the average chunk size.
     pub fn avg_size(&self) -> usize {
         self.avg_size
     }
@@ -147,7 +142,7 @@ impl ChunkConfig {
         &self.hash_config
     }
 
-    /// Returns the key for keyed gear table, if set (requires `keyed-cdc` feature).
+    /// Returns the keyed gear table key, if set (requires `keyed-cdc` feature).
     #[cfg(feature = "keyed-cdc")]
     pub fn keyed_gear_table_key(&self) -> Option<[u8; 32]> {
         self.key
@@ -173,13 +168,12 @@ impl Default for ChunkConfig {
     }
 }
 
-/// Configuration for chunk hashing behavior.
+/// Configuration for chunk hashing.
 ///
 /// Controls whether BLAKE3 cryptographic hashes are computed for each chunk.
-/// Hashing is enabled by default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct HashConfig {
-    /// Whether to compute BLAKE3 hashes for chunks.
+    /// Whether to compute BLAKE3 hashes.
     pub enabled: bool,
 }
 
@@ -213,7 +207,6 @@ mod tests {
     #[test]
     fn test_chunk_config_default() {
         let config = ChunkConfig::default();
-
         assert_eq!(config.min_size(), 4 * 1024);
         assert_eq!(config.avg_size(), 16 * 1024);
         assert_eq!(config.max_size(), 64 * 1024);
@@ -225,7 +218,6 @@ mod tests {
             .with_min_size(8192)
             .with_avg_size(32768)
             .with_max_size(131072);
-
         assert_eq!(config.min_size(), 8192);
         assert_eq!(config.avg_size(), 32768);
         assert_eq!(config.max_size(), 131072);
@@ -234,7 +226,6 @@ mod tests {
     #[test]
     fn test_chunk_config_valid() {
         let config = ChunkConfig::new(4096, 16384, 65536).unwrap();
-
         assert_eq!(config.min_size(), 4096);
         assert_eq!(config.avg_size(), 16384);
         assert_eq!(config.max_size(), 65536);
@@ -249,48 +240,30 @@ mod tests {
 
     #[test]
     fn test_chunk_config_invalid_ordering() {
-        assert!(
-            ChunkConfig::new(32768, 16384, 65536).is_err(),
-            "min > avg should fail"
-        );
-        assert!(
-            ChunkConfig::new(4096, 65536, 16384).is_err(),
-            "avg > max should fail"
-        );
+        assert!(ChunkConfig::new(32768, 16384, 65536).is_err());
+        assert!(ChunkConfig::new(4096, 65536, 16384).is_err());
     }
 
     #[test]
     fn test_chunk_config_invalid_non_power_of_two() {
-        assert!(
-            ChunkConfig::new(5, 16, 64).is_err(),
-            "Non-power-of-2 min_size should fail"
-        );
-        assert!(
-            ChunkConfig::new(4, 17, 64).is_err(),
-            "Non-power-of-2 avg_size should fail"
-        );
-        assert!(
-            ChunkConfig::new(4, 16, 65).is_err(),
-            "Non-power-of-2 max_size should fail"
-        );
+        assert!(ChunkConfig::new(5, 16, 64).is_err());
+        assert!(ChunkConfig::new(4, 17, 64).is_err());
+        assert!(ChunkConfig::new(4, 16, 65).is_err());
     }
 
     #[test]
     fn test_hash_config_default() {
-        let config = HashConfig::default();
-        assert!(config.enabled, "Hashing should be enabled by default");
+        assert!(HashConfig::default().enabled);
     }
 
     #[test]
     fn test_hash_config_enabled() {
-        let config = HashConfig::enabled();
-        assert!(config.enabled);
+        assert!(HashConfig::enabled().enabled);
     }
 
     #[test]
     fn test_hash_config_disabled() {
-        let config = HashConfig::disabled();
-        assert!(!config.enabled);
+        assert!(!HashConfig::disabled().enabled);
     }
 
     #[test]
@@ -303,16 +276,12 @@ mod tests {
     fn test_chunk_config_with_hash_config() {
         let hash_cfg = HashConfig::disabled();
         let chunk_cfg = ChunkConfig::default().with_hash_config(hash_cfg);
-
         assert!(!chunk_cfg.hash_config().enabled);
     }
 
     #[test]
     fn test_chunk_config_validate() {
         let config = ChunkConfig::default().with_min_size(0);
-        assert!(
-            config.validate().is_err(),
-            "Validation should catch invalid config"
-        );
+        assert!(config.validate().is_err());
     }
 }
