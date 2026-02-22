@@ -16,39 +16,27 @@
 
 ## 1. Design Goals
 
-### Primary Goals
-
-1. **Streaming-first**
-   Operate on byte streams without requiring full-file buffering.
-
-2. **High Throughput on Modern Hardware**
-   Sustain line-rate performance on NVMe, PCIe 5.0, 100 Gbps networks, and DDR5 memory *without intra-file parallelism*.
-
-3. **Deterministic-by-Content**
-   Given identical byte streams and configuration, the produced chunk *boundaries* and *hashes* are deterministic.
-
-4. **Zero-Copy Friendly**
-   Integrate cleanly with `bytes` for zero-copy chunk data slicing.
-
-5. **Allocator Discipline**
-   Avoid allocator contention and allocation storms under high throughput or many small files.
-
-6. **Std-quality API Surface**
-   Small, orthogonal traits. Predictable behavior. No hidden global state.
-
-7. **Memory Safety**
-   Zero unsafe code. `#![forbid(unsafe_code)]` enforced throughout.
+* **Streaming-first** - Process byte streams without full-file buffering
+* **High throughput** - Saturate modern I/O without intra-file parallelism
+* **Deterministic** - Identical inputs produce identical boundaries and hashes
+* **Zero-copy** - Efficient `Bytes` slicing with minimal allocations
+* **Allocator-disciplined** - Avoid contention under high throughput
+* **Std-quality API** - Small, predictable, no hidden state
+* **Memory-safe** - `#![forbid(unsafe_code)]` throughout
 
 ---
 
 ## 2. Non-Goals
 
-* Managing inter-file parallelism
-* Global I/O scheduling or device throttling
-* Chunk persistence or deduplication indexing
-* Network sync protocols or rsync-style negotiation
+`chunkrs` does not handle:
 
-These are explicitly **application responsibilities**.
+* Inter-file parallelism or thread pool management
+* I/O scheduling, device throttling, or storage coordination
+* Chunk persistence, deduplication indexing, or storage backends
+* Network protocols, sync negotiation, or application-level logic
+* HDD vs SSD vs NVMe detection or device-specific optimizations
+
+These are **application responsibilities** - `chunkrs` provides pure CDC.
 
 ---
 
@@ -95,51 +83,35 @@ The FastCDC algorithm processes each byte sequentially, maintaining rolling hash
 
 ---
 
-## 5. Streaming API
+## 5. API & Memory Model
 
-The core API exposes chunking as a **push-based streaming interface**:
+### Streaming Interface
 
-* `Chunker::push(Bytes)` - Feed data in arbitrary sizes (1 byte to megabytes)
-* `Chunker::finish()` - Emit final incomplete chunk when stream ends
-* Returns `(Vec<Chunk>, Bytes)` - Complete chunks and pending unprocessed bytes
+```rust
+let mut chunker = Chunker::new(config);
+let (chunks, pending) = chunker.push(data_bytes);
+let final_chunk = chunker.finish();
+```
 
-### Memory Considerations
-
-* The `push()` method returns a `Vec<Chunk>` - caller must process or drop chunks promptly
-* Accumulating returned chunks may OOM on large streams - caller's responsibility
-* Pending unprocessed bytes are held internally for CDC state continuity
-
-This design ensures:
-
-* Zero-copy chunk data via `Bytes` slicing from input
-* Caller controls memory and backpressure
-* Flexible integration with any data source
-
----
-
-## 6. Memory Architecture
+* **`push(Bytes)`** - Feed data in any size (1 byte to megabytes)
+* **`finish()`** - Emit final incomplete chunk when stream ends
+* **Returns** - `(Vec<Chunk>, Bytes)` - Complete chunks and pending bytes
 
 ### Zero-Copy Design
 
-The implementation uses `Bytes` from the `bytes` crate for zero-copy chunk data:
-
-* Chunk data is sliced directly from input `Bytes` references
-* No data copying when creating chunks
+* Chunk data is sliced directly from input `Bytes` - no copying
 * Caller owns the underlying memory
+* Pending bytes held internally only between `push()` calls
 
-### Allocator Discipline
+### Memory Responsibility
 
-To minimize allocations:
-
-* No global buffer pools
-* No cross-thread buffer migration
-* Pending bytes are held internally only between `push()` calls
-
-The library provides tools for efficient chunking, but memory management (thread pools, buffer reuse, etc.) is the application's responsibility.
+* Caller must process/drop chunks promptly (accumulating may OOM)
+* Caller controls backpressure and memory management
+* No global buffer pools or cross-thread state
 
 ---
 
-## 7. Execution Model
+## 6. Execution Model
 
 ### Single-Stream Serial CDC
 
@@ -166,112 +138,48 @@ The library provides pure CDC - concurrency and I/O orchestration are applicatio
 
 ---
 
-## 8. Input & Output Model
+## 7. I/O Model
 
-`chunkrs` accepts `Bytes` as input and emits `Chunk` objects:
+`chunkrs` accepts `Bytes` from any source and emits `Chunk` objects:
 
-**Input:**
+* **Input**: Files, network, buffers - any source providing `Bytes`
+* **Output**: Chunk with hash, length, offset, and zero-copy payload
+* **Errors**: Localized to stream, no global state corruption
+* **Recovery**: Checkpointing/resume is application's responsibility
 
-* Zero-copy slicing for efficient chunk data
-* Application owns the underlying memory
-* Supports any data source that can provide `Bytes` (files, network, buffers, etc.)
-
-**Output:**
-
-* Each chunk contains: content hash, length, optional offset, and zero-copy byte payload
-* The crate does not persist, index, or manage chunks - these are application responsibilities
+The crate does not persist, index, or manage chunks.
 
 ---
 
-## 9. Storage & I/O Policy
+## 8. Comparison to fastcdc
 
-`chunkrs` intentionally avoids device-level assumptions:
+| Aspect          | fastcdc      | chunkrs     |
+| --------------- | ------------ | ----------- |
+| Streaming API   | Limited      | First-class |
+| Zero-copy       | No           | Yes         |
+| Rust edition    | 2018         | 2024+       |
+| API quality     | Experimental | Std-style   |
 
-* HDD vs SSD vs NVMe is **not inferred**
-* Seek-throttling or device coordination is **not enforced**
-
-Applications may implement:
-
-* HDD coordinators
-* Rate limiters
-* Priority schedulers
-
-and feed serialized streams into `chunkrs`.
+`chunkrs` focuses on API quality and streaming correctness, not just speed.
 
 ---
 
-## 10. Failure & Recovery Semantics
+## 9. Summary
 
-* Chunking errors are localized to the stream
-* No global state is corrupted
-* Partial progress is observable via emitted chunks
-
-Checkpointing and resume logic belong to the application layer.
+`chunkrs` is a **deterministic, streaming, zero-copy** CDC engine with a simple push/finish API. Byte-by-byte processing ensures exact determinism, while `Bytes` slicing provides zero-copy efficiency. The library handles pure CDC - orchestration, I/O, and storage are application responsibilities.
 
 ---
 
-## 11. Comparison to Existing Crates
+## Appendix: Module Structure
 
-### fastcdc
-
-| Aspect            | fastcdc      | chunkrs     |
-| ----------------- | ------------ | ----------- |
-| Streaming API     | Limited      | First-class |
-| Async support     | No           | Yes         |
-| Zero-copy         | No           | Yes         |
-| Allocator control | Minimal      | Explicit    |
-| Rust edition      | 2018         | 2024+       |
-| API stability     | Experimental | Std-style   |
-
-`chunkrs` is not a reimplementation for speed alone — it is a **modernization** focused on API quality, streaming correctness, and integration into real systems.
-
----
-
-## 12. Module Structure
-
-```text
+```
 chunkrs/
 ├── lib.rs
-│
-├── chunk/
-│   ├── mod.rs
-│   ├── data.rs         # Chunk { data: Bytes, offset, hash }
-│   └── hash.rs         # ChunkHash newtype
-│
-├── chunker/
-│   ├── mod.rs
-│   └── engine.rs       # Chunker with push/finish streaming API
-│
-├── config/
-│   └── mod.rs          # ChunkConfig + HashConfig
-│
-├── error/
-│   └── mod.rs          # ChunkError (small, std-style)
-│
-├── cdc/
-│   ├── mod.rs
-│   └── fastcdc.rs      # rolling hash boundary detector
-│
-├── hash/
-│   ├── mod.rs
-│   └── blake3.rs       # strong hash implementation (feature-gated)
-│
-└── util/
-    └── mod.rs          # internal utility functions
+├── chunk/          # Chunk, ChunkHash
+├── chunker/        # Chunker with push/finish API
+├── config/         # ChunkConfig, HashConfig
+├── error/          # ChunkError
+├── cdc/            # FastCDC rolling hash
+├── hash/           # BLAKE3 (feature-gated)
+└── util/           # Internal helpers
 ```
-
-**Note:** `fuzz/` contains fuzz testing targets (development only) and is not part of the library structure.
-
-## 13. Summary
-
-`chunkrs` is a **deterministic, streaming, zero-copy** CDC engine.
-
-It provides:
-
-* Exact determinism - identical byte streams produce identical chunk boundaries
-* Push-based streaming API - process data of arbitrary size
-* Zero-copy chunk data via `Bytes` slicing
-* Simple, composable design - no hidden complexity
-
-If you need orchestration (concurrency, I/O, storage) — build it *around* `chunkrs`.
-If you need chunking — `chunkrs` stays out of your way.

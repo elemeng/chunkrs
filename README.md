@@ -13,12 +13,12 @@ Zero-copy streaming. Async-agnostic. Excellent for any chunking and hashing use 
 ## Features
 
 - **Streaming API**: `push()`/`finish()` pattern for processing data in any batch size
-- **Deterministic-by-design**: Identical bytes always produce identical chunk hashes, regardless of batching or execution timing
-- **Zero-copy**: Efficient `Bytes` handling with minimal allocations using `Bytes::copy_from_slice()`
-- **FastCDC algorithm**: Gear hash rolling boundary detection with configurable min/avg/max sizes
-- **BLAKE3 identity**: Cryptographic chunk hashing (optional, static computation)
+- **Deterministic-by-design**: Identical bytes produce identical chunk boundaries and hashes, regardless of batching or execution timing
+- **Zero-copy**: Efficient `Bytes` slicing from input with minimal allocations
+- **FastCDC algorithm**: Byte-by-byte gear hash rolling with configurable min/avg/max sizes
+- **BLAKE3 identity**: Cryptographic chunk hashing (optional, feature-gated)
 - **Strictly safe**: `#![forbid(unsafe_code)]` - zero unsafe code throughout
-- **Minimal API**: Only 6 types exported - `Chunker`, `Chunk`, `ChunkHash`, `ChunkConfig`, `HashConfig`, `ChunkError`
+- **Minimal API**: Only 6 public types - `Chunker`, `Chunk`, `ChunkHash`, `ChunkConfig`, `HashConfig`, `ChunkError`
 - **Well-tested**: Comprehensive unit tests, integration tests, and fuzzing
 
 ## Recent Improvements
@@ -32,16 +32,15 @@ Zero-copy streaming. Async-agnostic. Excellent for any chunking and hashing use 
 
 ## Architecture
 
-chunkrs processes **one logical byte stream at a time** with strictly serial CDC state:
+chunkrs processes **one logical byte stream at a time** with byte-by-byte serial CDC:
 
 ```text
-┌───────────────┐     ┌──────────────┐      ┌──────────────────┐ 
-│ Input Byte    │     │ I/O Batching │      │ Serial CDC State │
-│ Stream        │────▶│ (8KB buffers│────▶ │ Machine          │ 
-│ (any io::Read │     │  for syscall │      │ (FastCDC rolling │ 
-│  or AsyncRead)│     │  efficiency) │      │   hash)          │             
-└───────────────┘     └──────────────┘      └──────────────────┘ 
-
+┌───────────────┐     ┌──────────────────┐      ┌──────────────────┐ 
+│ Input Bytes   │     │ Push-based       │      │ Serial CDC State │
+│ (any source)  │────▶│ Streaming API    │────▶ │ (FastCDC rolling │ 
+│               │     │ push()/finish()  │      │   hash, byte-by- │             
+└───────────────┘     └──────────────────┘      │   byte)          │ 
+                                                     └──────────────────┘ 
     ┌─────────────┐       ┌───────────────────┐
     │             │       │ Chunk {           │
 ──▶ │ Chunk      │────▶  │   data: Bytes,    │
@@ -208,7 +207,7 @@ let no_hash = ChunkConfig::default().with_hash_config(HashConfig::disabled());
 
 **Throughput targets on modern hardware:**
 
-| Storage | Single-core CDC| Bottleneck |
+| Storage | Single-core CDC | Bottleneck |
 |---------|----------------|------------|
 | NVMe Gen4 | ~3–5 GB/s | CPU (hashing) |
 | NVMe Gen5 | ~3–5 GB/s | CDC algorithm |
@@ -218,22 +217,24 @@ let no_hash = ChunkConfig::default().with_hash_config(HashConfig::disabled());
 
 **Memory usage:**
 
-- Constant: `O(batch_size)` typically 4–16MB per stream
-- Thread-local cache: ~64MB per thread (reusable)
+- Per stream: `O(pending_bytes)` - typically minimal as pending is flushed on boundaries
+- Zero-copy: Chunk data references input `Bytes` without copying
+- Caller controls memory management (buffer pools, reuse, etc.)
 
 **To saturate NVMe Gen5:**
-Process multiple files concurrently (application-level parallelism). Do not attempt to parallelize within a single file—this destroys deduplication ratios.
+Process multiple files concurrently by running multiple `Chunker` instances. Do not attempt to parallelize within a single file—this destroys deduplication ratios.
 
 ## Determinism Guarantees
 
-chunkrs guarantees **content-addressable identity**:
+chunkrs guarantees **exact determinism**:
 
-- **Strong guarantee**: Identical byte streams produce identical `ChunkHash` (BLAKE3) values
-- **Boundary stability**: For identical inputs and configurations, chunk boundaries are deterministic across different batch sizes or execution timings
-- **Serial consistency**: Rolling hash state is strictly maintained across batch boundaries
+- **Boundary determinism**: Identical byte streams produce identical chunk boundaries at identical byte positions
+- **Hash determinism**: Identical byte streams produce identical `ChunkHash` (BLAKE3) values
+- **Batch independence**: Results are identical regardless of input batch sizes (1 byte vs 1MB vs streaming)
+- **Serial consistency**: Rolling hash state is strictly maintained across all `push()` calls
 
 **What this means:**
-You can re-chunk a file on Tuesday with different I/O batch sizes and get bit-identical chunks to Monday's run. This is essential for delta sync correctness.
+You can re-chunk a file on Tuesday with different batch sizes and get bit-identical chunks to Monday's run. This is essential for delta sync correctness.
 
 ## Safety & Correctness
 
@@ -284,13 +285,13 @@ Note: bumped version to 0.8.0 because design, APIs, features are almost matured.
 
 **Core Functionality:**
 
-- FastCDC rolling hash, sync, async I/O, zero-copy, BLAKE3 hashing, thread-local buffer pools, deterministic chunking
+- FastCDC rolling hash, push/finish streaming API, zero-copy, BLAKE3 hashing, deterministic chunking
 
 **Quality & Safety:**
 
-- 45 unit tests + 40 doctests, fuzzing, no `unsafe`
-- documents and example
-- benchmarks
+- Comprehensive unit tests + doctests, fuzzing, no `unsafe`
+- Documentation and examples
+- Benchmarks
 
 ### Planned Enhancements
 
@@ -305,8 +306,6 @@ Note: bumped version to 0.8.0 because design, APIs, features are almost matured.
 **1.0.0 — Stable Release:**
 
 - Alternative hash algorithms (xxHash for speed, SHA-256 for compatibility)
-- Configurable buffer pool sizes for memory-constrained environments
-- Custom allocator support for specialized use cases
 - Formal SemVer commitment with MSRV policy
 - Comprehensive integration guide and production deployment patterns
 
