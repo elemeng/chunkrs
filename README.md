@@ -12,13 +12,23 @@ Zero-copy streaming. Async-agnostic. Excellent for any chunking and hashing use 
 
 ## Features
 
-- **Streaming-first**: Processes multi-GB files with constant memory (no full-file buffering)
+- **Streaming API**: `push()`/`finish()` pattern for processing data in any batch size
 - **Deterministic-by-design**: Identical bytes always produce identical chunk hashes, regardless of batching or execution timing
-- **Zero-allocation hot path**: Thread-local buffer pools eliminate allocator contention under load
+- **Zero-copy**: Efficient `Bytes` handling with minimal allocations using `Bytes::copy_from_slice()`
 - **FastCDC algorithm**: Gear hash rolling boundary detection with configurable min/avg/max sizes
-- **BLAKE3 identity**: Cryptographic chunk hashing (optional, incremental)
-- **Runtime-agnostic async**: Works with Tokio, async-std, or any `futures-io` runtime
-- **Strictly safe**: `#![forbid(unsafe_code)]`
+- **BLAKE3 identity**: Cryptographic chunk hashing (optional, static computation)
+- **Strictly safe**: `#![forbid(unsafe_code)]` - zero unsafe code throughout
+- **Minimal API**: Only 6 types exported - `Chunker`, `Chunk`, `ChunkHash`, `ChunkConfig`, `HashConfig`, `ChunkError`
+- **Well-tested**: Comprehensive unit tests, integration tests, and fuzzing
+
+## Recent Improvements
+
+- **Optimized Bytes handling**: Eliminated unnecessary allocations in examples and tests
+- **Consolidated helpers**: Extracted duplicate code into reusable helper methods
+- **Simplified architecture**: Removed unused hasher state for better performance
+- **Fixed examples**: All examples now use random data for realistic testing
+- **Removed duplicates**: Consolidated duplicate code and fuzz targets
+- **Clean warnings**: All compiler warnings resolved
 
 ## Architecture
 

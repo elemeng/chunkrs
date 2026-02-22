@@ -331,7 +331,7 @@ mod tests {
     #[test]
     fn test_chunk_config_default() {
         let config = ChunkConfig::default();
-        
+
         assert_eq!(config.min_size(), 4 * 1024);
         assert_eq!(config.avg_size(), 16 * 1024);
         assert_eq!(config.max_size(), 64 * 1024);
@@ -343,7 +343,7 @@ mod tests {
             .with_min_size(8192)
             .with_avg_size(32768)
             .with_max_size(131072);
-        
+
         assert_eq!(config.min_size(), 8192);
         assert_eq!(config.avg_size(), 32768);
         assert_eq!(config.max_size(), 131072);
@@ -352,7 +352,7 @@ mod tests {
     #[test]
     fn test_chunk_config_valid() {
         let config = ChunkConfig::new(4096, 16384, 65536).unwrap();
-        
+
         assert_eq!(config.min_size(), 4096);
         assert_eq!(config.avg_size(), 16384);
         assert_eq!(config.max_size(), 65536);
@@ -367,20 +367,30 @@ mod tests {
 
     #[test]
     fn test_chunk_config_invalid_ordering() {
-        assert!(ChunkConfig::new(32768, 16384, 65536).is_err(), 
-                "min > avg should fail");
-        assert!(ChunkConfig::new(4096, 65536, 16384).is_err(), 
-                "avg > max should fail");
+        assert!(
+            ChunkConfig::new(32768, 16384, 65536).is_err(),
+            "min > avg should fail"
+        );
+        assert!(
+            ChunkConfig::new(4096, 65536, 16384).is_err(),
+            "avg > max should fail"
+        );
     }
 
     #[test]
     fn test_chunk_config_invalid_non_power_of_two() {
-        assert!(ChunkConfig::new(5, 16, 64).is_err(), 
-                "Non-power-of-2 min_size should fail");
-        assert!(ChunkConfig::new(4, 17, 64).is_err(), 
-                "Non-power-of-2 avg_size should fail");
-        assert!(ChunkConfig::new(4, 16, 65).is_err(), 
-                "Non-power-of-2 max_size should fail");
+        assert!(
+            ChunkConfig::new(5, 16, 64).is_err(),
+            "Non-power-of-2 min_size should fail"
+        );
+        assert!(
+            ChunkConfig::new(4, 17, 64).is_err(),
+            "Non-power-of-2 avg_size should fail"
+        );
+        assert!(
+            ChunkConfig::new(4, 16, 65).is_err(),
+            "Non-power-of-2 max_size should fail"
+        );
     }
 
     #[test]
@@ -410,16 +420,17 @@ mod tests {
     #[test]
     fn test_chunk_config_with_hash_config() {
         let hash_cfg = HashConfig::disabled();
-        let chunk_cfg = ChunkConfig::default()
-            .with_hash_config(hash_cfg);
-        
+        let chunk_cfg = ChunkConfig::default().with_hash_config(hash_cfg);
+
         assert!(!chunk_cfg.hash_config().enabled);
     }
 
     #[test]
     fn test_chunk_config_validate() {
         let config = ChunkConfig::default().with_min_size(0);
-        assert!(config.validate().is_err(), 
-                "Validation should catch invalid config");
+        assert!(
+            config.validate().is_err(),
+            "Validation should catch invalid config"
+        );
     }
 }

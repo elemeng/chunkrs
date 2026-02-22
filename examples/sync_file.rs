@@ -8,10 +8,13 @@
 
 use bytes::Bytes;
 use chunkrs::{ChunkConfig, Chunker};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create some test data (simulating data from any source)
-    let data: Vec<u8> = (0..100_000).map(|i| (i % 256) as u8).collect();
+    let mut rng = StdRng::from_entropy();
+    let mut data = vec![0u8; 100_000];
+    rng.fill(data.as_mut_slice());
 
     println!("Chunking {} bytes of data...\n", data.len());
 
@@ -39,11 +42,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let end = (offset + batch_size).min(data.len());
-        let batch = Bytes::from(data[offset..end].to_vec());
+        let batch = Bytes::copy_from_slice(&data[offset..end]);
 
         println!("Pushing batch: {} bytes", batch.len());
 
-        let (chunks, leftover) = chunker.push(batch);
+        // Combine pending with new batch
+        let input = if pending.is_empty() {
+            batch
+        } else {
+            let mut combined = Vec::with_capacity(pending.len() + batch.len());
+            combined.extend_from_slice(&pending);
+            combined.extend_from_slice(&batch);
+            Bytes::from(combined)
+        };
+
+        let (chunks, leftover) = chunker.push(input);
 
         for chunk in chunks {
             total_chunks += 1;
@@ -63,8 +76,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Handle any remaining data
     if offset < data.len() {
-        let batch = Bytes::from(data[offset..].to_vec());
-        let (chunks, leftover) = chunker.push(batch);
+        let batch = Bytes::copy_from_slice(&data[offset..]);
+        // Combine pending with remaining data
+        let input = if pending.is_empty() {
+            batch
+        } else {
+            let mut combined = Vec::with_capacity(pending.len() + batch.len());
+            combined.extend_from_slice(&pending);
+            combined.extend_from_slice(&batch);
+            Bytes::from(combined)
+        };
+
+        let (chunks, _leftover) = chunker.push(input);
         for chunk in chunks {
             total_chunks += 1;
             total_bytes += chunk.len();
@@ -75,7 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 chunk.len()
             );
         }
-        pending = leftover;
+        // leftover is not needed since finish() will handle any pending data
     }
 
     // Finalize stream

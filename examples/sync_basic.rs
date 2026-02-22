@@ -5,10 +5,13 @@
 
 use bytes::Bytes;
 use chunkrs::{ChunkConfig, Chunker};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create some sample data
-    let data = vec![0u8; 1024 * 1024]; // 1 MB of zeros
+    // Create some sample data with varied content using random numbers
+    let mut rng = StdRng::from_entropy();
+    let mut data = vec![0u8; 1024 * 1024]; // 1 MB buffer
+    rng.fill(data.as_mut_slice()); // Fill with random bytes
 
     // Create chunker with default config
     let mut chunker = Chunker::new(ChunkConfig::default());
@@ -22,8 +25,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Simulate streaming data in batches
     let batch_size = 8 * 1024; // 8 KB batches
     for chunk in data.chunks(batch_size) {
-        let batch = Bytes::from(chunk.to_vec());
-        let (chunks, leftover) = chunker.push(batch);
+        let batch = Bytes::copy_from_slice(chunk);
+        // Combine pending with new batch
+        let input = if pending.is_empty() {
+            batch
+        } else {
+            let mut combined = Vec::with_capacity(pending.len() + batch.len());
+            combined.extend_from_slice(&pending);
+            combined.extend_from_slice(&batch);
+            Bytes::from(combined)
+        };
+
+        let (chunks, leftover) = chunker.push(input);
 
         for chunk_result in chunks {
             total_chunks += 1;

@@ -33,9 +33,6 @@ use crate::cdc::FastCdc;
 use crate::chunk::Chunk;
 use crate::config::ChunkConfig;
 
-#[cfg(feature = "hash-blake3")]
-use crate::hash::Blake3Hasher;
-
 /// A chunker that processes streaming byte data into content-defined chunks.
 ///
 /// `Chunker` is a pure CDC engine that accepts bytes via `push()` and yields
@@ -98,16 +95,14 @@ use crate::hash::Blake3Hasher;
 /// }
 ///
 /// println!("Produced {} chunks", all_chunks.len());
-// # Ok::<(), chunkrs::ChunkError>(())
-// ```
+/// # Ok::<(), chunkrs::ChunkError>(())
+/// ```
 #[derive(Debug)]
 pub struct Chunker {
     cdc: FastCdc,
     pending: Option<Bytes>,
     offset: u64,
     config: ChunkConfig,
-    #[cfg(feature = "hash-blake3")]
-    hasher: Option<Blake3Hasher>,
 }
 
 impl Chunker {
@@ -130,12 +125,27 @@ impl Chunker {
             pending: None,
             offset: 0,
             config,
-            #[cfg(feature = "hash-blake3")]
-            hasher: if config.hash_config().enabled {
-                Some(Blake3Hasher::new())
-            } else {
-                None
-            },
+        }
+    }
+
+    /// Computes hash for the given data if hashing is enabled.
+    fn compute_hash(&self, data: &[u8]) -> Option<crate::chunk::ChunkHash> {
+        if !self.config.hash_config().enabled {
+            return None;
+        }
+        #[cfg(feature = "hash-blake3")]
+        return Some(crate::hash::Blake3Hasher::hash(data));
+        #[cfg(not(feature = "hash-blake3"))]
+        return None;
+    }
+
+    /// Creates a new Chunk with the given data, offset, and hash.
+    fn create_chunk(&self, data: Bytes, offset: u64) -> Chunk {
+        let hash = self.compute_hash(data.as_ref());
+        Chunk {
+            data,
+            offset: Some(offset),
+            hash,
         }
     }
 
@@ -195,33 +205,14 @@ impl Chunker {
                 // Found boundary - emit chunk
                 let chunk_data = if let Some(ref pending) = self.pending {
                     // Combine pending + new data for this chunk
-                    let mut combined =
-                        Vec::with_capacity(pending.len() + (i + 1 - new_chunk_start));
-                    combined.extend_from_slice(pending);
-                    combined.extend_from_slice(&data[new_chunk_start..=i]);
-                    Bytes::from(combined)
+                    crate::util::combine_bytes(pending, &data[new_chunk_start..=i])
                 } else {
                     // Just new data
                     data.slice(new_chunk_start..=i)
                 };
 
                 let chunk_offset = self.offset;
-
-                // Compute hash if enabled - compute from the final chunk data
-                #[cfg(feature = "hash-blake3")]
-                let hash = self
-                    .hasher
-                    .as_ref()
-                    .map(|_hasher| crate::hash::Blake3Hasher::hash(chunk_data.as_ref()));
-
-                #[cfg(not(feature = "hash-blake3"))]
-                let hash = None;
-
-                chunks.push(Chunk {
-                    data: chunk_data,
-                    offset: Some(chunk_offset),
-                    hash,
-                });
+                chunks.push(self.create_chunk(chunk_data, chunk_offset));
 
                 let chunk_len =
                     self.pending.as_ref().map_or(0, |p| p.len()) + (i + 1 - new_chunk_start);
@@ -236,10 +227,7 @@ impl Chunker {
             let remaining = data.slice(new_chunk_start..);
             if let Some(pending) = self.pending.take() {
                 // Need to combine with existing pending
-                let mut combined = Vec::with_capacity(pending.len() + remaining.len());
-                combined.extend_from_slice(&pending);
-                combined.extend_from_slice(&remaining);
-                self.pending = Some(Bytes::from(combined));
+                self.pending = Some(crate::util::combine_bytes(&pending, remaining.as_ref()));
             } else {
                 self.pending = Some(remaining);
             }
@@ -284,22 +272,7 @@ impl Chunker {
             }
 
             let chunk_offset = self.offset;
-
-            // Compute hash if enabled
-            #[cfg(feature = "hash-blake3")]
-            let hash = self
-                .hasher
-                .as_ref()
-                .map(|_hasher| crate::hash::Blake3Hasher::hash(pending.as_ref()));
-
-            #[cfg(not(feature = "hash-blake3"))]
-            let hash = None;
-
-            let chunk = Chunk {
-                data: pending,
-                offset: Some(chunk_offset),
-                hash,
-            };
+            let chunk = self.create_chunk(pending, chunk_offset);
 
             self.offset += chunk.len() as u64;
             Some(chunk)
@@ -335,10 +308,6 @@ impl Chunker {
         self.cdc.reset();
         self.pending = None;
         self.offset = 0;
-        #[cfg(feature = "hash-blake3")]
-        if let Some(ref mut hasher) = self.hasher {
-            hasher.reset();
-        }
     }
 
     /// Returns the current offset in the stream.

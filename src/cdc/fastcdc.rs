@@ -279,6 +279,7 @@ impl FastCdc {
 
     /// Processes a buffer and returns the position of the first boundary found,
     /// or None if no boundary was found in this buffer.
+    #[allow(dead_code)]
     pub fn find_boundary(&mut self, data: &[u8]) -> Option<usize> {
         for (i, &byte) in data.iter().enumerate() {
             if self.update(byte) {
@@ -289,26 +290,31 @@ impl FastCdc {
     }
 
     /// Returns the number of bytes since the last boundary.
+    #[allow(dead_code)]
     pub fn bytes_since_boundary(&self) -> usize {
         self.bytes_since_boundary
     }
 
     /// Returns the current hash value (for debugging).
+    #[allow(dead_code)]
     pub fn hash(&self) -> u64 {
         self.hash
     }
 
     /// Returns the minimum size.
+    #[allow(dead_code)]
     pub fn min_size(&self) -> usize {
         self.min_size
     }
 
     /// Returns the average size.
+    #[allow(dead_code)]
     pub fn avg_size(&self) -> usize {
         self.avg_size
     }
 
     /// Returns the maximum size.
+    #[allow(dead_code)]
     pub fn max_size(&self) -> usize {
         self.max_size
     }
@@ -331,7 +337,7 @@ mod tests {
     #[test]
     fn test_fastcdc_min_size_constraint() {
         let mut cdc = FastCdc::new(4, 16, 64);
-        
+
         // No boundaries before min_size
         for _ in 0..3 {
             assert!(!cdc.update(0xFF), "No boundary before min_size");
@@ -341,7 +347,7 @@ mod tests {
     #[test]
     fn test_fastcdc_boundary_detection() {
         let mut cdc = FastCdc::new(4, 16, 64);
-        
+
         // After min_size, should find boundaries
         let mut found_boundary = false;
         for i in 0..200 {
@@ -356,12 +362,12 @@ mod tests {
     #[test]
     fn test_fastcdc_max_size_enforcement() {
         let mut cdc = FastCdc::new(2, 8, 8);
-        
+
         // Process bytes up to just before max
         for _ in 0..7 {
             assert!(!cdc.update(0xFF), "No boundary before max_size");
         }
-        
+
         // At max_size, must force boundary
         assert!(cdc.update(0xFF), "Must force boundary at max_size");
     }
@@ -369,54 +375,64 @@ mod tests {
     #[test]
     fn test_fastcdc_reset() {
         let mut cdc = FastCdc::new(4, 16, 64);
-        
+
         // Process some data (less than min_size to avoid boundary)
         for _ in 0..3 {
             cdc.update(0xAA);
         }
-        
+
         let bytes_processed = cdc.bytes_since_boundary();
-        assert!(bytes_processed > 0, "Should have processed bytes: {}", bytes_processed);
-        
+        assert!(
+            bytes_processed > 0,
+            "Should have processed bytes: {}",
+            bytes_processed
+        );
+
         cdc.reset();
-        
-        assert_eq!(cdc.bytes_since_boundary(), 0, "Reset must clear byte counter");
+
+        assert_eq!(
+            cdc.bytes_since_boundary(),
+            0,
+            "Reset must clear byte counter"
+        );
         assert_eq!(cdc.hash(), 0, "Reset must clear hash");
     }
 
     #[test]
     fn test_fastcdc_determinism() {
         let data: Vec<u8> = (0..500).map(|i| (i % 256) as u8).collect();
-        
+
         let mut cdc1 = FastCdc::new(16, 64, 256);
         let mut cdc2 = FastCdc::new(16, 64, 256);
-        
+
         let mut boundaries1 = Vec::new();
         let mut boundaries2 = Vec::new();
-        
+
         for (i, &byte) in data.iter().enumerate() {
             if cdc1.update(byte) {
                 boundaries1.push(i + 1);
             }
         }
-        
+
         for (i, &byte) in data.iter().enumerate() {
             if cdc2.update(byte) {
                 boundaries2.push(i + 1);
             }
         }
-        
-        assert_eq!(boundaries1, boundaries2, 
-                   "Same input must produce same boundaries");
+
+        assert_eq!(
+            boundaries1, boundaries2,
+            "Same input must produce same boundaries"
+        );
     }
 
     #[test]
     fn test_fastcdc_find_boundary() {
         let mut cdc = FastCdc::new(4, 16, 64);
         let data = vec![0x55u8; 100];
-        
+
         let boundary = cdc.find_boundary(&data);
-        
+
         assert!(boundary.is_some(), "Must find boundary in data");
         let pos = boundary.unwrap();
         assert!(pos >= 4, "Boundary must be at or after min_size");
@@ -426,7 +442,7 @@ mod tests {
     #[test]
     fn test_fastcdc_default_config() {
         let cdc = FastCdc::default();
-        
+
         assert_eq!(cdc.min_size(), 4 * 1024);
         assert_eq!(cdc.avg_size(), 16 * 1024);
         assert_eq!(cdc.max_size(), 64 * 1024);
@@ -435,7 +451,7 @@ mod tests {
     #[test]
     fn test_fastcdc_size_accessors() {
         let cdc = FastCdc::new(8, 32, 128);
-        
+
         assert_eq!(cdc.min_size(), 8);
         assert_eq!(cdc.avg_size(), 32);
         assert_eq!(cdc.max_size(), 128);

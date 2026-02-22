@@ -9,11 +9,14 @@
 
 use bytes::Bytes;
 use chunkrs::{ChunkConfig, Chunker};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create some test data
-    let data: Vec<u8> = (0..100_000).map(|i| (i % 256) as u8).collect();
+    // Create some test data using random numbers
+    let mut rng = StdRng::from_entropy();
+    let mut data = vec![0u8; 100_000];
+    rng.fill(data.as_mut_slice());
 
     println!("Async chunking {} bytes of data...\n", data.len());
 
@@ -40,12 +43,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 
         let end = (offset + batch_size).min(data.len());
-        let batch = Bytes::from(data[offset..end].to_vec());
+        let batch = Bytes::copy_from_slice(&data[offset..end]);
 
         println!("Async received batch: {} bytes", batch.len());
 
         // Chunker.push() is synchronous - just call it
-        let (chunks, leftover) = chunker.push(batch);
+        // Combine pending with new batch
+        let input = if pending.is_empty() {
+            batch
+        } else {
+            let mut combined = Vec::with_capacity(pending.len() + batch.len());
+            combined.extend_from_slice(&pending);
+            combined.extend_from_slice(&batch);
+            Bytes::from(combined)
+        };
+
+        let (chunks, leftover) = chunker.push(input);
 
         for chunk in chunks {
             total_chunks += 1;

@@ -370,13 +370,13 @@ impl fmt::Display for Chunk {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::ChunkHash;
+    use super::*;
 
     #[test]
     fn test_chunk_creation() {
         let chunk = Chunk::new(&b"hello"[..]);
-        
+
         assert_eq!(chunk.len(), 5);
         assert!(!chunk.is_empty());
         assert_eq!(chunk.offset(), None);
@@ -386,7 +386,7 @@ mod tests {
     #[test]
     fn test_chunk_empty() {
         let chunk = Chunk::new(&b""[..]);
-        
+
         assert!(chunk.is_empty());
         assert_eq!(chunk.len(), 0);
     }
@@ -394,7 +394,7 @@ mod tests {
     #[test]
     fn test_chunk_with_offset() {
         let chunk = Chunk::with_offset(&b"data"[..], 100);
-        
+
         assert_eq!(chunk.offset(), Some(100));
         assert_eq!(chunk.start(), 100);
         assert_eq!(chunk.end(), 104);
@@ -404,17 +404,15 @@ mod tests {
     fn test_chunk_with_hash() {
         let hash = ChunkHash::new([0x12; 32]);
         let chunk = Chunk::with_hash(&b"data"[..], hash);
-        
+
         assert_eq!(chunk.hash(), Some(hash));
     }
 
     #[test]
     fn test_chunk_builder_pattern() {
         let hash = ChunkHash::new([0xAB; 32]);
-        let chunk = Chunk::new(&b"test"[..])
-            .set_offset(50)
-            .set_hash(hash);
-        
+        let chunk = Chunk::new(&b"test"[..]).set_offset(50).set_hash(hash);
+
         assert_eq!(chunk.len(), 4);
         assert_eq!(chunk.offset(), Some(50));
         assert_eq!(chunk.hash(), Some(hash));
@@ -423,7 +421,7 @@ mod tests {
     #[test]
     fn test_chunk_range() {
         let chunk = Chunk::with_offset(&b"hello world"[..], 10);
-        
+
         assert_eq!(chunk.range(), 10..21);
     }
 
@@ -431,7 +429,7 @@ mod tests {
     fn test_chunk_from_bytes() {
         let bytes = Bytes::from_static(b"test");
         let chunk: Chunk = bytes.into();
-        
+
         assert_eq!(chunk.len(), 4);
     }
 
@@ -439,7 +437,7 @@ mod tests {
     fn test_chunk_display() {
         let chunk = Chunk::with_offset(&b"data"[..], 100);
         let s = format!("{}", chunk);
-        
+
         assert!(s.contains("4 bytes"));
         assert!(s.contains("@ 100"));
     }
@@ -449,7 +447,7 @@ mod tests {
         let original = Bytes::from(&b"test data"[..]);
         let chunk = Chunk::new(original.clone());
         let extracted = chunk.into_data();
-        
+
         assert_eq!(extracted, original);
     }
 
@@ -457,9 +455,9 @@ mod tests {
     fn test_chunk_into_parts() {
         let hash = ChunkHash::new([0x99; 32]);
         let chunk = Chunk::new(&b"data"[..]).set_hash(hash);
-        
+
         let (data, extracted_hash) = chunk.into_parts();
-        
+
         assert_eq!(data.as_ref(), b"data");
         assert_eq!(extracted_hash, Some(hash));
     }

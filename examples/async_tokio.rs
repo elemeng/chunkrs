@@ -8,15 +8,19 @@
 
 use bytes::Bytes;
 use chunkrs::{ChunkConfig, Chunker};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create multiple data streams
-    let streams: Vec<Vec<u8>> = vec![
-        (0..50_000).map(|i| (i % 256) as u8).collect(),
-        (50_000..100_000).map(|i| (i % 256) as u8).collect(),
-        (100_000..150_000).map(|i| (i % 256) as u8).collect(),
-    ];
+    // Create multiple data streams with random data
+    let mut rng = StdRng::from_entropy();
+    let mut stream1 = vec![0u8; 50_000];
+    let mut stream2 = vec![0u8; 50_000];
+    let mut stream3 = vec![0u8; 50_000];
+    rng.fill(stream1.as_mut_slice());
+    rng.fill(stream2.as_mut_slice());
+    rng.fill(stream3.as_mut_slice());
+    let streams = vec![stream1, stream2, stream3];
 
     println!("Processing {} streams concurrently...\n", streams.len());
 
@@ -48,7 +52,7 @@ fn process_stream(
     stream_id: usize,
     data: Vec<u8>,
     config: ChunkConfig,
-) -> Result<(usize, usize, usize), Box<dyn std::error::Error>> {
+) -> Result<(usize, usize, usize), String> {
     let mut chunker = Chunker::new(config);
     let mut chunk_count = 0;
     let mut total_bytes = 0;
@@ -60,9 +64,19 @@ fn process_stream(
 
     while offset < data.len() {
         let end = (offset + batch_size).min(data.len());
-        let batch = Bytes::from(data[offset..end].to_vec());
+        let batch = Bytes::copy_from_slice(&data[offset..end]);
 
-        let (chunks, leftover) = chunker.push(batch);
+        // Combine pending with new batch
+        let input = if pending.is_empty() {
+            batch
+        } else {
+            let mut combined = Vec::with_capacity(pending.len() + batch.len());
+            combined.extend_from_slice(&pending);
+            combined.extend_from_slice(&batch);
+            Bytes::from(combined)
+        };
+
+        let (chunks, leftover) = chunker.push(input);
 
         for chunk in chunks {
             chunk_count += 1;

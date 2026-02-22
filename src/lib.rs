@@ -37,9 +37,37 @@
 //!
 //! - **Feature: `hash-blake3`** (default) - Enables BLAKE3 cryptographic hashing
 //!
-//! # Examples
+//! # Quick Start
 //!
-//! ## Streaming API
+//! ```
+//! use chunkrs::{Chunker, ChunkConfig};
+//! use bytes::Bytes;
+//!
+//! fn main() {
+//!     // Create a chunker with default configuration
+//!     let mut chunker = Chunker::new(ChunkConfig::default());
+//!
+//!     // Process data in streaming fashion
+//!     let data = Bytes::from("hello world, this is some data to chunk");
+//!     let (chunks, _pending) = chunker.push(data);
+//!
+//!     // Get any final incomplete chunk
+//!     if let Some(final_chunk) = chunker.finish() {
+//!         println!("Final chunk: {} bytes", final_chunk.len());
+//!     }
+//!
+//!     // Process all chunks
+//!     for chunk in chunks {
+//!         println!("Chunk: offset={:?}, len={}, hash={:?}",
+//!                  chunk.offset, chunk.len(), chunk.hash);
+//!     }
+//! }
+//! ```
+//!
+//! # Streaming API
+//!
+//! The streaming API is designed for processing data of arbitrary size without
+//! loading everything into memory at once:
 //!
 //! ```
 //! use chunkrs::{Chunker, ChunkConfig};
@@ -49,19 +77,51 @@
 //!     let mut chunker = Chunker::new(ChunkConfig::default());
 //!     let mut pending = Bytes::new();
 //!
-//!     // Feed data
-//!     for chunk in &[Bytes::from(&b"first"[..]), Bytes::from(&b"second"[..])] {
-//!         let (chunks, leftover) = chunker.push(chunk);
-//!         // Process chunks...
+//!     // Feed data in batches of any size
+//!     let data = vec![
+//!         Bytes::from(&b"first part"[..]),
+//!         Bytes::from(&b" second part"[..]),
+//!         Bytes::from(&b" final part"[..]),
+//!     ];
+//!
+//!     for batch in data {
+//!         // Combine pending bytes from previous call with new batch
+//!         let input = if pending.is_empty() {
+//!             batch
+//!         } else {
+//!             let mut combined = Vec::with_capacity(pending.len() + batch.len());
+//!             combined.extend_from_slice(&pending);
+//!             combined.extend_from_slice(&batch);
+//!             Bytes::from(combined)
+//!         };
+//!
+//!         let (chunks, leftover) = chunker.push(input);
+//!
+//!         // Process complete chunks
+//!         for chunk in chunks {
+//!             println!("Chunk: {} bytes", chunk.len());
+//!         }
+//!
+//!         // Keep leftover for next iteration
 //!         pending = leftover;
 //!     }
 //!
-//!     // Finalize stream
+//!     // Finalize stream to get any remaining data
 //!     if let Some(final_chunk) = chunker.finish() {
-//!         // Process final chunk...
+//!         println!("Final chunk: {} bytes", final_chunk.len());
 //!     }
 //! }
 //! ```
+//!
+//! ## Determinism
+//!
+//! Identical byte streams produce identical chunk boundaries, regardless of:
+//! - How many bytes are pushed at once (1 byte vs 1MB)
+//! - Call timing
+//! - Number of `push()` calls
+//!
+//! This makes chunk boundaries stable across different execution strategies.
+//!
 //! ## Configuration
 //!
 //! Customize chunk sizes to match your use case:
@@ -72,6 +132,13 @@
 //! // Custom sizes: min 4KB, avg 16KB, max 64KB
 //! let config = ChunkConfig::new(4096, 16384, 65536)?;
 //! assert_eq!(config.min_size(), 4096);
+//!
+//! // Builder pattern for incremental configuration
+//! let config = ChunkConfig::default()
+//!     .with_min_size(8192)
+//!     .with_avg_size(32768)
+//!     .with_max_size(131072)
+//!     .with_hash_config(chunkrs::HashConfig::enabled());
 //! # Ok::<(), ChunkError>(())
 //! ```
 
@@ -88,6 +155,7 @@ pub mod error;
 pub(crate) mod cdc; // FastCDC rolling hash implementation
 #[cfg(feature = "hash-blake3")]
 pub(crate) mod hash; // BLAKE3 hasher wrapper
+pub(crate) mod util; // Internal utility functions
 
 //
 // Public API surface
@@ -96,7 +164,10 @@ pub(crate) mod hash; // BLAKE3 hasher wrapper
 // to keep the surface area small and the API stable.
 //
 
-/// Chunk types and related utilities.
+/// Chunk type returned by the chunker.
+///
+/// Users receive `Chunk` objects from [`Chunker::push()`] and [`Chunker::finish()`]
+/// and can access the chunk data, offset, and optional hash.
 pub use chunk::{Chunk, ChunkHash};
 
 /// Chunking engine for processing byte streams.

@@ -114,7 +114,7 @@ fn bench_streaming(c: &mut Criterion) {
             let batch_size = 8192;
 
             for chunk in black_box(&data).chunks(batch_size) {
-                let (chunks, _) = chunker.push(Bytes::from(chunk.to_vec()));
+                let (chunks, _) = chunker.push(Bytes::copy_from_slice(chunk));
                 total += chunks.len();
             }
 
