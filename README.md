@@ -21,6 +21,92 @@ Zero-copy streaming. Async-agnostic. Excellent for any chunking and hashing use 
 - **Minimal API**: Only 6 public types accessible from crate root - `Chunker`, `Chunk`, `ChunkHash`, `ChunkConfig`, `HashConfig`, `ChunkError`
 - **Well-tested**: Comprehensive unit tests, integration tests, and fuzzing
 
+## API Changes from v0.8 to v0.9
+
+**Breaking Change**: v0.9 simplifies the API by removing I/O-specific functionality and focusing on pure streaming CDC.
+
+### What Changed
+
+| v0.8 API | v0.9 API |
+|----------|----------|
+| `Chunker::chunk_file()` | Removed - use `Chunker::push()` with your file reader |
+| `Chunker::chunk_bytes()` | Removed - use `Chunker::push()` directly |
+| `Chunker::chunk_async()` | Removed - async support is application-layer concern |
+| `chunker.push(bytes)` | ✅ Kept - core streaming API |
+| `chunker.finish()` | ✅ Kept - finalize stream |
+
+### Migration Guide
+
+**v0.8 - File chunking:**
+```rust
+// v0.8 - no longer available
+let chunks = chunker.chunk_file("path/to/file")?;
+```
+
+**v0.9 - File chunking:**
+```rust
+// v0.9 - read file yourself, feed to chunker
+use std::fs::File;
+use std::io::Read;
+
+let mut file = File::open("path/to/file")?;
+let mut buffer = vec![0u8; 8192];
+let mut chunker = Chunker::new(ChunkConfig::default());
+
+loop {
+    let n = file.read(&mut buffer)?;
+    if n == 0 { break; }
+    let (chunks, leftover) = chunker.push(Bytes::copy_from_slice(&buffer[..n]));
+    // process chunks...
+}
+if let Some(final_chunk) = chunker.finish() {
+    // process final chunk...
+}
+```
+
+**v0.8 - Async file chunking:**
+```rust
+// v0.8 - no longer available
+let chunks = chunker.chunk_async(reader).await?;
+```
+
+**v0.9 - Async file chunking:**
+```rust
+// v0.9 - use your async runtime with standard Chunker
+use tokio::io::AsyncReadExt;
+
+let mut reader = reader;
+let mut chunker = Chunker::new(ChunkConfig::default());
+let mut buffer = vec![0u8; 8192];
+
+loop {
+    let n = reader.read(&mut buffer).await?;
+    if n == 0 { break; }
+    let (chunks, leftover) = chunker.push(Bytes::copy_from_slice(&buffer[..n]));
+    // process chunks...
+}
+if let Some(final_chunk) = chunker.finish() {
+    // process final chunk...
+}
+```
+
+### Benefits of the New Design
+
+- **Simpler**: One API (`push()`) for all data sources
+- **Flexible**: Works with any byte source (files, network, memory)
+- **Composable**: Easily integrates with existing I/O code
+- **Explicit**: I/O strategy is controlled by your application
+- **Smaller**: Smaller dependency footprint (no tokio requirement)
+
+### Features Removed
+
+The following features were intentionally removed to simplify the crate:
+
+- ❌ File I/O helpers (read files yourself)
+- ❌ Async streaming adapters (use your async runtime)
+- ❌ Thread-local buffer pools (caller manages memory)
+- ❌ Iterator-based APIs (use `push()`/`finish()` loop)
+
 ## Architecture
 
 chunkrs processes **one logical byte stream at a time** with byte-by-byte serial CDC:
@@ -116,7 +202,7 @@ No duplicate paths like `chunkrs::chunk::Chunk` - only `chunkrs::Chunk`.
 | `ChunkHash` | 32-byte BLAKE3 hash identifying chunk content |
 | `ChunkConfig` | Min/avg/max chunk sizes and hash configuration |
 | `HashConfig` | Hash algorithm configuration (BLAKE3) |
-| `ChunkError` | Error type for chunking operations |
+| `ChunkError` | Error enum for chunking operations (InvalidConfig) |
 
 ### Streaming API
 
