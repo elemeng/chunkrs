@@ -9,7 +9,7 @@ use bytes::Bytes;
 ///
 /// This is used when pending bytes need to be combined with new data
 /// to form a complete chunk.
-pub(crate) fn combine_bytes(a: &Bytes, b: &[u8]) -> Bytes {
+pub fn combine_bytes(a: &Bytes, b: &[u8]) -> Bytes {
     let mut combined = Vec::with_capacity(a.len() + b.len());
     combined.extend_from_slice(a);
     combined.extend_from_slice(b);

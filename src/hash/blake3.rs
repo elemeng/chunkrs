@@ -114,7 +114,7 @@ impl Blake3Hasher {
     /// let hash = hasher.finalize();
     /// ```
     #[allow(dead_code)]
-    pub(crate) fn finalize(&self) -> ChunkHash {
+    pub fn finalize(&self) -> ChunkHash {
         ChunkHash::new(self.state.finalize().into())
     }
 
@@ -163,7 +163,7 @@ impl Blake3Hasher {
     ///
     /// let hash = Blake3Hasher::hash(b"hello world");
     /// ```
-    pub(crate) fn hash(data: &[u8]) -> ChunkHash {
+    pub fn hash(data: &[u8]) -> ChunkHash {
         ChunkHash::new(blake3::hash(data).into())
     }
 }
