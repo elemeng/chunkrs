@@ -4,6 +4,7 @@
 //! chunk boundaries.
 
 mod fastcdc;
+mod ultracdc;
 
 // Re-export for use within the crate
 pub(crate) use fastcdc::FastCdc;

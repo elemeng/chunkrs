@@ -110,7 +110,7 @@ impl Chunker {
     ///
     /// # Arguments
     ///
-    /// * `config` - The chunking configuration specifying min/avg/max chunk sizes
+    /// * `config` - The chunking configuration specifying min/avg/max chunk sizes and normalization level
     ///
     /// # Example
     ///
@@ -121,7 +121,12 @@ impl Chunker {
     /// ```
     pub fn new(config: ChunkConfig) -> Self {
         Self {
-            cdc: FastCdc::new(config.min_size(), config.avg_size(), config.max_size()),
+            cdc: FastCdc::new(
+                config.min_size(),
+                config.avg_size(),
+                config.max_size(),
+                config.normalization_level(),
+            ),
             pending: None,
             offset: 0,
             config,

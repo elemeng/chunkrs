@@ -302,21 +302,33 @@ impl FastCdc {
     /// * `min_size` - Minimum chunk size (no boundaries before this)
     /// * `avg_size` - Average/target chunk size
     /// * `max_size` - Maximum chunk size (forces boundary if reached)
+    /// * `normalization_level` - Mask aggressiveness (0 = none, 1 = ±1 bit, 2 = ±2 bits, etc.)
     ///
     /// # Normalization
     ///
-    /// Uses normalization level 1 (mask adjustment by ±1 bit) as recommended
-    /// in the FastCDC paper. This provides the best balance between deduplication
-    /// ratio and performance.
-    pub fn new(min_size: usize, avg_size: usize, max_size: usize) -> Self {
+    /// The normalization level controls how aggressively masks adjust around the average:
+    /// - Level 0: Single mask throughout (no adjustment)
+    /// - Level 1 (default): Masks differ by ±1 bit - balanced distribution
+    /// - Level N: Masks differ by ±N bits - tighter distribution, more predictable sizes
+    pub fn new(min_size: usize, avg_size: usize, max_size: usize, normalization_level: u8) -> Self {
         // Get the bit position for avg_size
         let avg_bits = avg_size.trailing_zeros() as usize;
+        let level = normalization_level as usize;
 
-        // Normalization level 1: adjust masks by ±1 bit
-        // This provides the best balance between deduplication ratio and performance
-        // per the FastCDC paper recommendations
-        let mask_s = MASKS[avg_bits + 1]; // Harder to match (more bits)
-        let mask_l = MASKS[avg_bits - 1]; // Easier to match (fewer bits)
+        // Calculate masks based on normalization level
+        // Level 0: no adjustment (single mask)
+        // Level N: masks differ by ±N bits
+        let mask_s = if level == 0 {
+            MASKS[avg_bits] // Same mask throughout
+        } else {
+            MASKS[avg_bits + level] // Harder to match (more bits set)
+        };
+
+        let mask_l = if level == 0 {
+            MASKS[avg_bits] // Same mask throughout
+        } else {
+            MASKS[avg_bits - level] // Easier to match (fewer bits set)
+        };
 
         Self {
             hash: 0,
@@ -454,6 +466,7 @@ impl Default for FastCdc {
             crate::config::DEFAULT_MIN_CHUNK_SIZE,
             crate::config::DEFAULT_AVG_CHUNK_SIZE,
             crate::config::DEFAULT_MAX_CHUNK_SIZE,
+            crate::config::DEFAULT_NORMALIZATION_LEVEL,
         )
     }
 }
@@ -464,7 +477,7 @@ mod tests {
 
     #[test]
     fn test_fastcdc_min_size_constraint() {
-        let mut cdc = FastCdc::new(4, 16, 64);
+        let mut cdc = FastCdc::new(4, 16, 64, 1);
 
         // No boundaries before min_size
         for _ in 0..3 {
@@ -474,7 +487,7 @@ mod tests {
 
     #[test]
     fn test_fastcdc_boundary_detection() {
-        let mut cdc = FastCdc::new(4, 16, 64);
+        let mut cdc = FastCdc::new(4, 16, 64, 1);
 
         // After min_size, should find boundaries
         let mut found_boundary = false;
@@ -489,7 +502,7 @@ mod tests {
 
     #[test]
     fn test_fastcdc_max_size_enforcement() {
-        let mut cdc = FastCdc::new(2, 8, 8);
+        let mut cdc = FastCdc::new(2, 8, 8, 1);
 
         // Process bytes up to just before max
         for _ in 0..7 {
@@ -502,7 +515,7 @@ mod tests {
 
     #[test]
     fn test_fastcdc_reset() {
-        let mut cdc = FastCdc::new(4, 16, 64);
+        let mut cdc = FastCdc::new(4, 16, 64, 1);
 
         // Process some data (less than min_size to avoid boundary)
         for _ in 0..3 {
@@ -530,8 +543,8 @@ mod tests {
     fn test_fastcdc_determinism() {
         let data: Vec<u8> = (0..500).map(|i| (i % 256) as u8).collect();
 
-        let mut cdc1 = FastCdc::new(16, 64, 256);
-        let mut cdc2 = FastCdc::new(16, 64, 256);
+        let mut cdc1 = FastCdc::new(16, 64, 256, 1);
+        let mut cdc2 = FastCdc::new(16, 64, 256, 1);
 
         let mut boundaries1 = Vec::new();
         let mut boundaries2 = Vec::new();
@@ -556,7 +569,7 @@ mod tests {
 
     #[test]
     fn test_fastcdc_find_boundary() {
-        let mut cdc = FastCdc::new(4, 16, 64);
+        let mut cdc = FastCdc::new(4, 16, 64, 1);
         let data = vec![0x55u8; 100];
 
         let boundary = cdc.find_boundary(&data);
@@ -578,10 +591,42 @@ mod tests {
 
     #[test]
     fn test_fastcdc_size_accessors() {
-        let cdc = FastCdc::new(8, 32, 128);
+        let cdc = FastCdc::new(8, 32, 128, 1);
 
         assert_eq!(cdc.min_size(), 8);
         assert_eq!(cdc.avg_size(), 32);
         assert_eq!(cdc.max_size(), 128);
+    }
+
+    #[test]
+    fn test_fastcdc_normalization_level_0() {
+        let mut cdc = FastCdc::new(4, 16, 64, 0);
+
+        // With level 0, masks are the same throughout
+        // Should still find boundaries, just with different distribution
+        let mut found_boundary = false;
+        for i in 0..200 {
+            if cdc.update((i % 256) as u8) {
+                found_boundary = true;
+                break;
+            }
+        }
+        assert!(found_boundary, "Level 0 must still find boundaries");
+    }
+
+    #[test]
+    fn test_fastcdc_normalization_level_2() {
+        let mut cdc = FastCdc::new(4, 16, 64, 2);
+
+        // With level 2, masks differ by ±2 bits
+        // Should produce tighter distribution around avg_size
+        let mut found_boundary = false;
+        for i in 0..200 {
+            if cdc.update((i % 256) as u8) {
+                found_boundary = true;
+                break;
+            }
+        }
+        assert!(found_boundary, "Level 2 must find boundaries");
     }
 }

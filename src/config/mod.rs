@@ -31,6 +31,12 @@ pub const DEFAULT_AVG_CHUNK_SIZE: usize = 16 * 1024;
 /// Default maximum chunk size (64 KiB).
 pub const DEFAULT_MAX_CHUNK_SIZE: usize = 64 * 1024;
 
+/// Default normalization level for FastCDC mask generation.
+///
+/// Controls how aggressively chunk sizes are distributed around the average.
+/// Level 1 means masks differ by ±1 bit from the base mask at avg_size.
+pub const DEFAULT_NORMALIZATION_LEVEL: u8 = 1;
+
 /// Configuration for content-defined chunking behavior.
 ///
 /// `ChunkConfig` controls the size constraints and hashing behavior for the
@@ -39,6 +45,7 @@ pub const DEFAULT_MAX_CHUNK_SIZE: usize = 64 * 1024;
 /// - Minimum chunk size (`min_size`) - No chunk will be smaller than this
 /// - Average chunk size (`avg_size`) - Target size for most chunks
 /// - Maximum chunk size (`max_size`) - No chunk will exceed this
+/// - Normalization level (`normalization_level`) - Controls chunk size distribution
 ///
 /// # Size Constraints
 ///
@@ -46,6 +53,18 @@ pub const DEFAULT_MAX_CHUNK_SIZE: usize = 64 * 1024;
 /// - Non-zero
 /// - Powers of 2 (for optimal performance)
 /// - Ordered: `min_size <= avg_size <= max_size`
+///
+/// # Normalization Level
+///
+/// The normalization level controls how aggressively chunk sizes are distributed
+/// around the average:
+///
+/// - **Level 0**: No normalization - single mask throughout
+/// - **Level 1** (default): Masks differ by ±1 bit - balanced distribution
+/// - **Level 2+**: Masks differ by ±N bits - tighter distribution
+///
+/// Higher levels produce more predictable chunk sizes but may reduce deduplication
+/// ratio for heterogeneous data.
 ///
 /// # Example
 ///
@@ -62,7 +81,8 @@ pub const DEFAULT_MAX_CHUNK_SIZE: usize = 64 * 1024;
 /// let config = ChunkConfig::default()
 ///     .with_min_size(8192)
 ///     .with_avg_size(32768)
-///     .with_max_size(131072);
+///     .with_max_size(131072)
+///     .with_normalization_level(2);
 /// # Ok::<(), chunkrs::ChunkError>(())
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -75,6 +95,9 @@ pub struct ChunkConfig {
 
     /// Maximum chunk size in bytes.
     max_size: usize,
+
+    /// Normalization level for mask generation (0-31).
+    normalization_level: u8,
 
     /// Configuration for hashing behavior.
     hash_config: HashConfig,
@@ -132,10 +155,16 @@ impl ChunkConfig {
             });
         }
 
+        // Validate normalization level doesn't exceed available bits
+        let avg_bits = avg_size.trailing_zeros() as u8;
+        // Use the smaller of default level and available bits
+        let effective_level = DEFAULT_NORMALIZATION_LEVEL.min(avg_bits.saturating_sub(1));
+
         Ok(Self {
             min_size,
             avg_size,
             max_size,
+            normalization_level: effective_level,
             hash_config: HashConfig::default(),
         })
     }
@@ -194,6 +223,27 @@ impl ChunkConfig {
         self
     }
 
+    /// Sets the normalization level for mask generation.
+    ///
+    /// Higher levels produce more predictable chunk sizes by making the mask
+    /// transition more aggressive. Valid range is 0-31.
+    ///
+    /// Note: This does not validate the configuration. Use [`ChunkConfig::validate`]
+    /// to check if the configuration is valid.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chunkrs::ChunkConfig;
+    ///
+    /// let config = ChunkConfig::default().with_normalization_level(2);
+    /// assert_eq!(config.normalization_level(), 2);
+    /// ```
+    pub fn with_normalization_level(mut self, level: u8) -> Self {
+        self.normalization_level = level;
+        self
+    }
+
     /// Sets the hash configuration.
     ///
     /// # Example
@@ -224,6 +274,11 @@ impl ChunkConfig {
         self.max_size
     }
 
+    /// Returns the normalization level.
+    pub fn normalization_level(&self) -> u8 {
+        self.normalization_level
+    }
+
     /// Returns the hash configuration.
     pub fn hash_config(&self) -> &HashConfig {
         &self.hash_config
@@ -252,6 +307,7 @@ impl Default for ChunkConfig {
             min_size: DEFAULT_MIN_CHUNK_SIZE,
             avg_size: DEFAULT_AVG_CHUNK_SIZE,
             max_size: DEFAULT_MAX_CHUNK_SIZE,
+            normalization_level: DEFAULT_NORMALIZATION_LEVEL,
             hash_config: HashConfig::default(),
         }
     }
