@@ -151,11 +151,12 @@ pub mod chunker;
 pub mod config;
 pub mod error;
 
-// Internal modules (implementation details) - pub(crate) for use within crate
-pub(crate) mod cdc; // FastCDC rolling hash implementation
+// Internal modules (implementation details)
+// These are not exposed in the public API
+mod cdc; // FastCDC rolling hash implementation
 #[cfg(feature = "hash-blake3")]
-pub(crate) mod hash; // BLAKE3 hasher wrapper
-pub(crate) mod util; // Internal utility functions
+mod hash; // BLAKE3 hasher wrapper
+mod util; // Internal utility functions
 
 //
 // Public API surface
